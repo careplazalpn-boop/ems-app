@@ -40,4 +40,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+#รูปภาพผู้ป่วย
+public/uploads/patient/*
+!public/uploads/patient/.gitkeep
+
+
 /src/generated/prisma
+
