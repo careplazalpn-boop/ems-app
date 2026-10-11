@@ -37,12 +37,12 @@ export async function GET() {
     });
 
     return NextResponse.json({
-      images: images.map((img) => ({
+      images: images.map((img: { id: number }) => ({
         id: img.id,
         url: `/api/profile/images/${img.id}`,
         isSelected: user?.avatars === `db_${img.id}`,
       })),
-      currentAvatar: user?.avatars,
+      currentAvatar: user?.avatars,    
     });
   } catch (error: any) {
     return NextResponse.json({ message: error.message }, { status: 500 });
