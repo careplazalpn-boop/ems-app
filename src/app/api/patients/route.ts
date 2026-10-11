@@ -70,7 +70,7 @@ export async function GET(request: Request) {
           hometel: true,
           death: true,
           home_latitude: true,  
-          home_longitude: true, 
+          home_longitude: true, // เพิ่ม
         },
         take: limit,
         skip: skip,
@@ -79,9 +79,9 @@ export async function GET(request: Request) {
       db.patient.count({ where: whereConditions }),
     ]);
 
-    const formattedPatients = patients.map((p) => ({
-      ...p,
-      imageUrl: `/api/patients/image?hn=${p.hn}`,
+    const formattedPatients = patients.map((p: any) => ({
+    ...p,
+    imageUrl: `/api/patients/image?hn=${p.hn}`,
     }));
 
     return NextResponse.json({
