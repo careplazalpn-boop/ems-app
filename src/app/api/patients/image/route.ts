@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import fs from "fs";
 import path from "path";
+import sharp from "sharp";
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "patient");
 
-// ฟังก์ชันส่งคืนรูปเริ่มต้น
 function getDefaultPatientImage() {
   const defaultPath = path.join(process.cwd(), "public", "images", "avatars", "default.png");
   if (fs.existsSync(defaultPath)) {
@@ -25,20 +25,20 @@ export async function GET(request: Request) {
 
     if (!hn) return getDefaultPatientImage();
 
-    // 1. ตรวจสอบว่ามีไฟล์แคชใน /public/uploads/patient/{hn}.png แล้วหรือยัง
-    const cachedFilePath = path.join(UPLOAD_DIR, `${hn}.png`);
+    // 1. ตรวจสอบไฟล์แคช WebP เดิม
+    const cachedFilePath = path.join(UPLOAD_DIR, `${hn}.webp`);
     if (fs.existsSync(cachedFilePath)) {
       const fileBuffer = fs.readFileSync(cachedFilePath);
       return new NextResponse(fileBuffer, {
         status: 200,
         headers: {
-          "Content-Type": "image/png",
+          "Content-Type": "image/webp",
           "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
         },
       });
     }
 
-    // 2. ถ้ายังไม่มี ให้ดึงจากตาราง patient_image
+    // 2. ดึงจากฐานข้อมูล
     const record = await db.patient_image.findFirst({
       where: { hn: hn },
       select: { image: true },
@@ -51,17 +51,22 @@ export async function GET(request: Request) {
 
     const imageBuffer = Buffer.from(record.image);
 
-    // 3. สร้างโฟลเดอร์ถ้ายังไม่มี และเขียนไฟล์เก็บลงดิสก์
+    // 3. ใช้ Sharp ย่อขนาดเหลือไม่เกิน 400x400 px และแปลงเป็น WebP (บีบอัดคุณภาพ 80%)
+    const optimizedBuffer = await sharp(imageBuffer)
+      .resize(400, 400, { fit: "cover", withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
+
+    // 4. บันทึกแคชลงดิสก์
     if (!fs.existsSync(UPLOAD_DIR)) {
       fs.mkdirSync(UPLOAD_DIR, { recursive: true });
     }
-    fs.writeFileSync(cachedFilePath, imageBuffer);
+    fs.writeFileSync(cachedFilePath, optimizedBuffer);
 
-    // 4. ส่งคืนรูปภาพกลับไปให้ Client
-    return new NextResponse(imageBuffer, {
+    return new NextResponse(optimizedBuffer, {
       status: 200,
       headers: {
-        "Content-Type": "image/png",
+        "Content-Type": "image/webp",
         "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
       },
     });
