@@ -19,6 +19,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  UserSearch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -33,6 +34,7 @@ interface UserProfile {
 
 const menuItems = [
   { title: "แดชบอร์ดภาพรวม", href: "/", icon: LayoutDashboard },
+  { title: "ค้นหาข้อมูลผู้ป่วย", href: "/patients", icon: UserSearch },  
   { title: "บันทึกรับแจ้งเหตุใหม่", href: "/cases/new", icon: FilePlus },
   { title: "รายการเคสฉุกเฉิน", href: "/cases", icon: ClipboardList },
   { title: "แผนที่ติดตามรถพยาบาล", href: "/tracking", icon: MapPin },
@@ -41,17 +43,12 @@ const menuItems = [
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-
   const [user, setUser] = useState<UserProfile | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  
-  // สเตทสำหรับ Responsive Menu
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
-
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // ดึงข้อมูลผู้ใช้งาน
   useEffect(() => {
     let isMounted = true;
     async function fetchUserProfile() {
@@ -72,7 +69,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // ปิดเมนูดรอปดาวน์เมื่อคลิกนอกพื้นที่
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -85,7 +81,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // ปิด Drawer Mobile อัตโนมัติเมื่อเปลี่ยนหน้า (URL เปลี่ยน)
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [pathname]);
@@ -103,23 +98,38 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen flex bg-zinc-50 relative overflow-x-hidden">
+    <div className="h-screen w-screen flex bg-zinc-50 overflow-hidden relative">
       {/* ---------------- MOBILE OVERLAY BACKDROP ---------------- */}
       {mobileMenuOpen && (
         <div
           onClick={() => setMobileMenuOpen(false)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-300 animate-in fade-in"
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-300"
         />
       )}
 
-      {/* ---------------- SIDEBAR NAVIGATION ---------------- */}
+      {/* ---------------- SIDEBAR (ตรึงเต็มความสูงหน้าจอตลอดเวลา) ---------------- */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col border-r border-zinc-800 transition-all duration-300 ease-in-out lg:static shrink-0 ${
+        className={`fixed inset-y-0 left-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col border-r border-zinc-800 transition-all duration-300 ease-in-out lg:static lg:h-full shrink-0 ${
           mobileMenuOpen ? "translate-x-0 w-72 shadow-2xl" : "-translate-x-full lg:translate-x-0"
         } ${desktopCollapsed ? "lg:w-20" : "lg:w-64"}`}
       >
-        {/* Sidebar Header / Logo */}
-        <div className="p-4 border-b border-zinc-800/80 flex items-center justify-between gap-3">
+        {/* ปุ่มพับ/กางเมนูลอยตรงกึ่งกลางขอบ Sidebar สำหรับ Desktop */}
+        <button
+          type="button"
+          onClick={() => setDesktopCollapsed(!desktopCollapsed)}
+          className="hidden lg:flex items-center justify-center absolute -right-3.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white hover:bg-orange-600 hover:border-orange-500 shadow-md transition-all duration-200 z-50 cursor-pointer group"
+          title={desktopCollapsed ? "ขยายแถบเมนู" : "ย่อแถบเมนู"}
+          aria-label={desktopCollapsed ? "ขยายแถบเมนู" : "ย่อแถบเมนู"}
+        >
+          {desktopCollapsed ? (
+            <ChevronRight className="h-4 w-4 transition-transform group-hover:scale-110" />
+          ) : (
+            <ChevronLeft className="h-4 w-4 transition-transform group-hover:scale-110" />
+          )}
+        </button>
+
+        {/* ส่วนหัว Sidebar: โลโก้หน่วยงาน */}
+        <div className="h-16 px-4 border-b border-zinc-800/80 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative h-10 w-10 shrink-0 bg-white p-1 rounded-xl shadow-inner">
               <Image
@@ -141,7 +151,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          {/* ปุ่มปิดเมนูเฉพาะบน Mobile */}
+          {/* ปุ่มปิดเฉพาะบนหน้าจอมือถือ */}
           <button
             onClick={() => setMobileMenuOpen(false)}
             className="lg:hidden text-zinc-400 hover:text-white p-1.5 rounded-lg hover:bg-zinc-900 cursor-pointer"
@@ -151,9 +161,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* สถานะศูนย์วิทยุ */}
+        {/* ป้ายสถานะศูนย์วิทยุ */}
         {(!desktopCollapsed || mobileMenuOpen) ? (
-          <div className="px-3.5 py-2 mx-3 mt-3 bg-zinc-900/90 border border-zinc-800 rounded-xl flex items-center justify-between">
+          <div className="px-3.5 py-2 mx-3 mt-3 bg-zinc-900/90 border border-zinc-800 rounded-xl flex items-center justify-between shrink-0">
             <span className="text-xs text-zinc-400 flex items-center gap-1.5 font-medium truncate">
               <Radio className="h-3.5 w-3.5 text-red-500 animate-pulse shrink-0" />
               ศูนย์วิทยุ
@@ -163,7 +173,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </span>
           </div>
         ) : (
-          <div className="mt-3 flex justify-center" title="สถานะศูนย์วิทยุ: พร้อมรับเหตุ">
+          <div className="mt-3 flex justify-center shrink-0" title="สถานะศูนย์วิทยุ: พร้อมรับเหตุ">
             <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse ring-4 ring-emerald-950" />
           </div>
         )}
@@ -193,25 +203,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* ส่วนท้าย Sidebar: ย่อหน้าต่าง (Desktop) และ ปุ่ม Logout */}
-        <div className="p-3 border-t border-zinc-900 space-y-1.5">
-          {/* ปุ่มพับหน้าต่างเฉพาะโหมด Desktop */}
-          <button
-            type="button"
-            onClick={() => setDesktopCollapsed(!desktopCollapsed)}
-            className="hidden lg:flex w-full items-center justify-center p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-xl transition-colors cursor-pointer text-xs gap-2"
-            title={desktopCollapsed ? "ขยายเมนู" : "ย่อเมนู"}
-          >
-            {desktopCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <>
-                <ChevronLeft className="h-4 w-4" />
-                <span>ย่อแถบเมนู</span>
-              </>
-            )}
-          </button>
-
+        {/* ปุ่มออกจากระบบด้านล่างสุด */}
+        <div className="p-3 border-t border-zinc-900 shrink-0">
           <Button
             onClick={handleLogout}
             variant="ghost"
@@ -226,12 +219,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* ---------------- MAIN CONTENT WRAPPER ---------------- */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
-        {/* Top Navbar Header */}
-        <header className="h-16 bg-white border-b border-zinc-200 px-4 sm:px-6 flex items-center justify-between shadow-xs sticky top-0 z-30">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Hamburger Button สำหรับ Mobile/Tablet */}
+      {/* ---------------- MAIN CONTENT WRAPPER (ขัง Scroll ไว้ด้านใน) ---------------- */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        {/* Top Header Bar */}
+        <header className="h-16 bg-white border-b border-zinc-200 px-4 sm:px-6 flex items-center justify-between shadow-xs shrink-0 z-30">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            {/* Hamburger Button สำหรับ Mobile / Tablet */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
@@ -241,7 +234,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <Menu className="h-5 w-5" />
             </button>
 
-            {/* โลโก้และชื่อหน่วยงานบน Header */}
+            {/* โลโก้และชื่อศูนย์บริการ */}
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="h-8 w-8 rounded-lg bg-red-100 flex items-center justify-center text-red-600 shrink-0">
                 <Ambulance className="h-5 w-5" />
@@ -327,8 +320,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* พื้นที่ Content ด้านใน (ยืดหยุ่นตามหน้าจอ) */}
-        <main className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto">
+        {/* พื้นที่ Content ด้านใน: เลื่อน Scroll เฉพาะส่วนนี้ */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {children}
         </main>
       </div>
