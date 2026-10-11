@@ -1,0 +1,28 @@
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+
+export async function POST() {
+  try {
+    const cookieStore = await cookies();
+
+    // ลบ Cookie session_token โดยตั้งค่าให้หมดอายุทันที (maxAge: 0)
+    cookieStore.set("session_token", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    });
+
+    return NextResponse.json(
+      { success: true, message: "ออกจากระบบเรียบร้อยแล้ว" },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("Logout Error:", error);
+    return NextResponse.json(
+      { message: "เกิดข้อผิดพลาดในการออกจากระบบ" },
+      { status: 500 }
+    );
+  }
+}

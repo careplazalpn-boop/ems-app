@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // ดึง cookie session ที่เราสร้างไว้ตอน login
   const sessionToken = request.cookies.get("session_token")?.value;
   const { pathname } = request.nextUrl;
