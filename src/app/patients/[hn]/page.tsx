@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { AppLayout } from "@/components/layout/app-layout";
 import { 
@@ -28,10 +28,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 
-// โหลด Map Editor แบบ Dynamic เพื่อไม่ให้ชนกับ Server-Side Rendering
+// โหลด Map Editor แบบ Dynamic เพื่อป้องกัน SSR
 const PatientMapEditor = dynamic(
   () => import("@/components/patient/patient-map-editor"),
-  { ssr: false, loading: () => <div className="h-[340px] bg-zinc-100 rounded-2xl animate-pulse" /> }
+  { 
+    ssr: false, 
+    loading: () => (
+      <div className="h-[360px] bg-zinc-100 rounded-2xl flex items-center justify-center text-zinc-400 text-xs animate-pulse">
+        กำลังโหลดแผนที่...
+      </div>
+    ) 
+  }
 );
 
 interface PatientDetail {
@@ -64,14 +71,10 @@ interface PatientDetail {
   imageUrl: string;
 }
 
-export default function PatientDetailPage({
-  params,
-}: {
-  params: Promise<{ hn: string }>;
-}) {
+export default function PatientDetailPage() {
   const router = useRouter();
-  const resolvedParams = use(params);
-  const hn = resolvedParams.hn;
+  const routeParams = useParams();
+  const hn = routeParams?.hn as string;
 
   const [patient, setPatient] = useState<PatientDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,6 +86,7 @@ export default function PatientDetailPage({
   const [formData, setFormData] = useState<any>({});
 
   const loadPatient = async () => {
+    if (!hn) return;
     try {
       setLoading(true);
       const res = await fetch(`/api/patients/${hn}`);
@@ -113,7 +117,9 @@ export default function PatientDetailPage({
   };
 
   useEffect(() => {
-    loadPatient();
+    if (hn) {
+      loadPatient();
+    }
   }, [hn]);
 
   const calculateAge = (birthday: string | null) => {
@@ -139,7 +145,7 @@ export default function PatientDetailPage({
     }
   };
 
-  // ดึงพิกัดปัจจุบันผ่าน GPS ของบราวเซอร์
+  // ดึงพิกัดปัจจุบันผ่าน GPS ของเบราว์เซอร์
   const handleGetCurrentLocation = () => {
     if (!navigator.geolocation) {
       alert("เบราว์เซอร์นี้ไม่รองรับการระบุตำแหน่ง GPS");
@@ -529,7 +535,7 @@ export default function PatientDetailPage({
                     <Input
                       type="number"
                       step="any"
-                      value={formData.home_latitude || ""}
+                      value={formData.home_latitude ?? ""}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
@@ -544,7 +550,7 @@ export default function PatientDetailPage({
                     <Input
                       type="number"
                       step="any"
-                      value={formData.home_longitude || ""}
+                      value={formData.home_longitude ?? ""}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
