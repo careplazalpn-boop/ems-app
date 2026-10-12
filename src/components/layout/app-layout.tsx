@@ -109,7 +109,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* ---------------- SIDEBAR (รองรับทุกขนาดหน้าจออย่างสมบูรณ์) ---------------- */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col border-r border-zinc-800 transition-all duration-300 ease-in-out lg:static lg:h-full shrink-0 relative overflow-hidden ${
+        className={`fixed inset-y-0 left-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col border-r border-zinc-800 transition-all duration-300 ease-in-out shrink-0 relative overflow-hidden ${
           mobileMenuOpen ? "translate-x-0 w-72 shadow-2xl" : "-translate-x-full lg:translate-x-0"
         } ${desktopCollapsed ? "lg:w-20" : "lg:w-64"}`}
       >
