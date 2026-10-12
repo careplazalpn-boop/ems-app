@@ -1,5 +1,5 @@
-export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
+import { connection } from "next/server";
 import { db } from "@/lib/db";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
@@ -11,66 +11,77 @@ const JWT_SECRET = new TextEncoder().encode(
 );
 
 export async function GET(request: Request) {
+  // ประกาศ runtime connection สำหรับ Next.js 16 cacheComponents
+  await connection();
+
   try {
     const { searchParams } = new URL(request.url);
     const userIdParam = searchParams.get("userId");
 
-    let userId: number | null = userIdParam ? parseInt(userIdParam, 10) : null;
+    let targetUserId: number | null = userIdParam ? parseInt(userIdParam, 10) : null;
 
-    // หากไม่ได้ระบุ userId ใน query ให้ดึงจาก Token ในคุกกี้ปัจจุบัน
-    if (!userId) {
+    // หากไม่ได้ระบุ userId มาใน Query ให้ถอดรหัสจาก Session Cookie ปัจจุบัน
+    if (!targetUserId) {
       const cookieStore = await cookies();
       const token = cookieStore.get("session_token")?.value;
       if (token) {
         try {
           const { payload } = await jwtVerify(token, JWT_SECRET);
-          userId = Number(payload.userId);
+          targetUserId = (payload.userId as number) || (payload.id as number) || null;
         } catch {
-          // Token ไม่ถูกต้อง ปล่อยผ่านไปคืนค่ารูปเริ่มต้น
+          // Token ไม่ถูกต้อง ให้ข้ามไปใช้ default avatar
         }
       }
     }
 
-    if (userId) {
-      // ค้นหารูปโปรไฟล์ปัจจุบันของผู้ใช้
-      const user = await db.users.findUnique({
-        where: { user_id: userId },
-        select: { img: true },
-      });
+    // หากพบ userId ให้ค้นหาข้อมูลรูปจากตาราง user / opduser
+    if (targetUserId) {
+      const user: any = await db.user.findUnique({
+        where: { id: targetUserId },
+        select: { avatar: true },
+      }).catch(() => null);
 
-      if (user?.img && user.img.length > 0) {
-        return new NextResponse(user.img, {
-          status: 200,
-          headers: {
-            "Content-Type": "image/jpeg",
-            "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
-          },
-        });
+      if (user?.avatar) {
+        // กรณีเก็บเป็น Binary Buffer / BLOB
+        if (Buffer.isBuffer(user.avatar)) {
+          return new NextResponse(user.avatar, {
+            headers: {
+              "Content-Type": "image/jpeg",
+              "Cache-Control": "public, max-age=86400, stale-while-revalidate=43200",
+            },
+          });
+        }
+
+        // กรณีเก็บเป็น Path ไฟล์บนดิสก์
+        if (typeof user.avatar === "string") {
+          const filePath = path.join(process.cwd(), "public", user.avatar.replace(/^\//, ""));
+          if (fs.existsSync(filePath)) {
+            const fileBuffer = fs.readFileSync(filePath);
+            return new NextResponse(fileBuffer, {
+              headers: {
+                "Content-Type": "image/webp",
+                "Cache-Control": "public, max-age=86400, stale-while-revalidate=43200",
+              },
+            });
+          }
+        }
       }
     }
 
-    // กรณีไม่มีรูป ให้ส่งรูป Default
-    const defaultImagePath = path.join(
-      process.cwd(),
-      "public",
-      "images",
-      "avatars",
-      "default.png"
-    );
-
-    if (fs.existsSync(defaultImagePath)) {
-      const defaultImage = fs.readFileSync(defaultImagePath);
-      return new NextResponse(defaultImage, {
-        status: 200,
+    // ถ้าไม่มีรูป ให้ส่งรูป Default Avatar กลับ
+    const defaultAvatarPath = path.join(process.cwd(), "public", "images", "avatars", "default.png");
+    if (fs.existsSync(defaultAvatarPath)) {
+      const defaultBuffer = fs.readFileSync(defaultAvatarPath);
+      return new NextResponse(defaultBuffer, {
         headers: {
           "Content-Type": "image/png",
-          "Cache-Control": "public, max-age=86400",
+          "Cache-Control": "public, max-age=604800, immutable",
         },
       });
     }
 
     return new NextResponse(null, { status: 404 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Avatar API Error:", error);
     return new NextResponse(null, { status: 500 });
   }
