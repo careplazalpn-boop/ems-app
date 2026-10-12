@@ -1,20 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { Crosshair, Loader2, RotateCcw } from "lucide-react";
-
-// ตั้งค่าไอคอนหมุด
-const markerIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
 
 interface MapEditorProps {
   lat: number | null;
@@ -30,10 +17,9 @@ export default function PatientMapEditor({
   onChange,
 }: MapEditorProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const markerRef = useRef<L.Marker | null>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
 
-  // เก็บค่าพิกัดตั้งต้น (Original Coordinates) ไว้ใช้รีเซ็ต
   const initialCoordsRef = useRef<{ lat: number; lng: number }>({
     lat: lat || 18.5772,
     lng: lng || 99.0087,
@@ -42,46 +28,65 @@ export default function PatientMapEditor({
   const [gettingLocation, setGettingLocation] = useState(false);
 
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    // ป้องกันการรันบน Server ตอน Build
+    if (typeof window === "undefined" || !mapContainerRef.current) return;
 
-    const startLat = initialCoordsRef.current.lat;
-    const startLng = initialCoordsRef.current.lng;
+    let isMounted = true;
 
-    if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current).setView(
-        [startLat, startLng],
-        lat && lng ? 17 : 14
-      );
+    // นำเข้า Leaflet แบบ Dynamic ฝั่ง Client เท่านั้น
+    import("leaflet").then((L) => {
+      import("leaflet/dist/leaflet.css");
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-      }).addTo(map);
+      if (!isMounted || !mapContainerRef.current) return;
 
-      const marker = L.marker([startLat, startLng], {
-        icon: markerIcon,
-        draggable: isEditing,
-      }).addTo(map);
-
-      // Event: ลากหมุดเสร็จแล้วอัปเดตพิกัด
-      marker.on("dragend", () => {
-        const pos = marker.getLatLng();
-        onChange(Number(pos.lat.toFixed(8)), Number(pos.lng.toFixed(8)));
+      const markerIcon = L.icon({
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41],
       });
 
-      // Event: คลิกบนแผนที่เพื่อย้ายหมุดในโหมดแก้ไข
-      map.on("click", (e) => {
-        if (isEditing) {
-          marker.setLatLng(e.latlng);
-          onChange(Number(e.latlng.lat.toFixed(8)), Number(e.latlng.lng.toFixed(8)));
-        }
-      });
+      const startLat = initialCoordsRef.current.lat;
+      const startLng = initialCoordsRef.current.lng;
 
-      mapInstanceRef.current = map;
-      markerRef.current = marker;
-    }
+      if (!mapInstanceRef.current) {
+        const map = L.map(mapContainerRef.current).setView(
+          [startLat, startLng],
+          lat && lng ? 17 : 14
+        );
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 19,
+        }).addTo(map);
+
+        const marker = L.marker([startLat, startLng], {
+          icon: markerIcon,
+          draggable: isEditing,
+        }).addTo(map);
+
+        marker.on("dragend", () => {
+          const pos = marker.getLatLng();
+          onChange(Number(pos.lat.toFixed(8)), Number(pos.lng.toFixed(8)));
+        });
+
+        map.on("click", (e: any) => {
+          if (isEditing) {
+            marker.setLatLng(e.latlng);
+            onChange(Number(e.latlng.lat.toFixed(8)), Number(e.latlng.lng.toFixed(8)));
+          }
+        });
+
+        mapInstanceRef.current = map;
+        markerRef.current = marker;
+      }
+    });
 
     return () => {
+      isMounted = false;
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -90,7 +95,7 @@ export default function PatientMapEditor({
     };
   }, []);
 
-  // ซิงค์ตำแหน่งและการเปิด/ปิดโหมดลากหมุด
+  // ซิงค์โหมดแก้ไขและการย้ายพิกัด
   useEffect(() => {
     if (markerRef.current && mapInstanceRef.current) {
       if (isEditing) {
@@ -105,7 +110,6 @@ export default function PatientMapEditor({
     }
   }, [lat, lng, isEditing]);
 
-  // ฟังก์ชันรีเซ็ตกลับค่าเดิม (Reset to Initial Coords)
   const handleResetToOriginal = () => {
     const origLat = initialCoordsRef.current.lat;
     const origLng = initialCoordsRef.current.lng;
@@ -120,7 +124,6 @@ export default function PatientMapEditor({
     }
   };
 
-  // ฟังก์ชันดึงพิกัด GPS ปัจจุบัน
   const handleLocateMe = () => {
     if (!navigator.geolocation) {
       alert("เบราว์เซอร์หรืออุปกรณ์นี้ไม่รองรับการดึงพิกัด GPS");
@@ -147,21 +150,9 @@ export default function PatientMapEditor({
       },
       (err) => {
         setGettingLocation(false);
-        let msg = "ไม่สามารถระบุพิกัดได้";
-        if (err.code === 1) {
-          msg = "กรุณาอนุญาต (Allow) การเข้าถึงสิทธิ์ Location บนเบราว์เซอร์";
-        } else if (err.code === 2) {
-          msg = "ไม่พบสัญญาณดาวเทียมหรือพิกัดตำแหน่ง";
-        } else if (err.code === 3) {
-          msg = "หมดเวลาการค้นหาพิกัด GPS";
-        }
-        alert(msg);
+        alert("ไม่สามารถระบุพิกัดได้: " + err.message);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 0,
-      }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     );
   };
 
@@ -169,7 +160,6 @@ export default function PatientMapEditor({
     <div className="relative w-full h-[360px] rounded-2xl overflow-hidden border border-zinc-200">
       <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-      {/* แถบคำแนะนำด้านบน */}
       {isEditing && (
         <div className="absolute top-3 left-3 z-[1000] bg-black/75 text-white text-xs px-3 py-1.5 rounded-xl shadow-md pointer-events-none backdrop-blur-xs flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -177,9 +167,7 @@ export default function PatientMapEditor({
         </div>
       )}
 
-      {/* กลุ่มปุ่มควบคุมมุมมองแผนที่ (มุมขวาล่าง) */}
       <div className="absolute bottom-4 right-4 z-[1000] flex items-center gap-2">
-        {/* ปุ่มรีเซ็ตกลับค่าเดิม (แสดงทั้งตอนดูและตอนแก้ไข) */}
         <button
           type="button"
           onClick={handleResetToOriginal}
@@ -190,7 +178,6 @@ export default function PatientMapEditor({
           <span>รีเซ็ตค่าเดิม</span>
         </button>
 
-        {/* ปุ่มดึงพิกัด GPS (แสดงเฉพาะโหมดแก้ไข) */}
         {isEditing && (
           <button
             type="button"
