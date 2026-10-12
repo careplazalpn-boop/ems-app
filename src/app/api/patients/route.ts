@@ -7,6 +7,13 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.AUTH_SECRET || "lamphun-ems-secret-key-2026-secure"
 );
 
+function cleanNumber(val: string | number | null | undefined): string {
+  if (val === null || val === undefined) return "";
+  const cleaned = String(val).trim();
+  const num = parseInt(cleaned, 10);
+  return isNaN(num) ? cleaned : num.toString();
+}
+
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -28,14 +35,12 @@ export async function GET(request: Request) {
 
     const tokens = query.split(/\s+/).filter(Boolean);
 
-    // เงื่อนไขค้นหา: ทุกฟิลด์ใช้ contains (เจอบางส่วนก็แสดงผลทันที)
     const orConditions: any[] = [
       { hn: { contains: query } },
       { cid: { contains: query } },
       { addrpart: { contains: query } },
     ];
 
-    // ค้นหาชื่อ-นามสกุลแบบแยกคำ (เช่น "สม ใจ")
     if (tokens.length > 0) {
       orConditions.push({
         AND: tokens.map((word) => ({
@@ -50,7 +55,7 @@ export async function GET(request: Request) {
 
     const whereConditions = { OR: orConditions };
 
-    const [patients, total] = await Promise.all([
+    const [patients, total, allVillages] = await Promise.all([
       db.patient.findMany({
         where: whereConditions,
         select: {
@@ -63,26 +68,80 @@ export async function GET(request: Request) {
           birthday: true,
           addrpart: true,
           moopart: true,
+          village_id: true,
           road: true,
+          tmbpart: true,
+          amppart: true,
+          chwpart: true,
           address_full: true,
           bloodgrp: true,
           mobile_phone_number: true,
           hometel: true,
           death: true,
-          home_latitude: true,  
-          home_longitude: true, // เพิ่ม
+          home_latitude: true,
+          home_longitude: true,
         },
         take: limit,
         skip: skip,
         orderBy: { id: "desc" },
       }),
       db.patient.count({ where: whereConditions }),
+      db.village.findMany({
+        select: {
+          village_id: true,
+          village_moo: true,
+          village_name: true,
+        },
+      }),
     ]);
 
-    const formattedPatients = patients.map((p: any) => ({
-    ...p,
-    imageUrl: `/api/patients/image?hn=${p.hn}`,
-    }));
+    // สร้าง Map สำหรับจับคู่ village ด้วย village_id และ village_moo
+    const villageById = new Map<string, string>();
+    const villageByMoo = new Map<string, string>();
+
+    allVillages.forEach((v: any) => {
+      const name = v.village_name?.trim() || "";
+      if (v.village_id) {
+        villageById.set(cleanNumber(v.village_id), name);
+      }
+      if (v.village_moo !== null && v.village_moo !== undefined) {
+        villageByMoo.set(cleanNumber(v.village_moo), name);
+      }
+    });
+
+    const formattedPatients = patients.map((p: any) => {
+      // เงื่อนไขในเขตเทศบาลเมืองลำพูน: ต.ในเมือง (01), อ.เมือง (01), จ.ลำพูน (51)
+      const isInRegion =
+        cleanNumber(p.tmbpart) === "1" &&
+        cleanNumber(p.amppart) === "1" &&
+        cleanNumber(p.chwpart) === "51";
+
+      let communityName = "นอกเขต";
+
+      if (isInRegion) {
+        const vId = cleanNumber(p.village_id);
+        const moo = cleanNumber(p.moopart);
+
+        // 1. ลองเทียบจาก village_id ก่อน
+        if (vId && villageById.has(vId)) {
+          communityName = villageById.get(vId)!;
+        } 
+        // 2. ถ้าไม่มี village_id ให้เทียบจาก moopart กับ village_moo
+        else if (moo && villageByMoo.has(moo)) {
+          communityName = villageByMoo.get(moo)!;
+        } 
+        else {
+          communityName = moo ? `ชุมชนหมู่ที่ ${moo}` : "ในเขต (ไม่ระบุชุมชน)";
+        }
+      }
+
+      return {
+        ...p,
+        communityName,
+        isInRegion,
+        imageUrl: `/api/patients/image?hn=${p.hn}`,
+      };
+    });
 
     return NextResponse.json({
       patients: formattedPatients,
@@ -93,6 +152,9 @@ export async function GET(request: Request) {
     });
   } catch (error: any) {
     console.error("Patient Search API Error:", error);
-    return NextResponse.json({ message: "เกิดข้อผิดพลาดในการค้นหาข้อมูล", error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { message: "เกิดข้อผิดพลาดในการค้นหาข้อมูล", error: error.message },
+      { status: 500 }
+    );
   }
 }

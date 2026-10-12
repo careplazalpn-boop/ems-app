@@ -19,7 +19,9 @@ import {
   Navigation,
   ZoomIn,
   ZoomOut,
-  RotateCcw
+  RotateCcw,
+  Building2,
+  Eye
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -43,6 +45,8 @@ interface Patient {
   death: string | null;
   home_latitude: number | string | null;
   home_longitude: number | string | null;
+  communityName: string;
+  isInRegion: boolean;
   imageUrl: string;
 }
 
@@ -52,10 +56,8 @@ export default function PatientsPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  // สเตต Lightbox รูปภาพ
+  // สเตต Lightbox
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string; hn: string } | null>(null);
-  
-  // สเตต Zoom & Pan รูปภาพ
   const [zoomScale, setZoomScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -152,7 +154,6 @@ export default function PatientsPage() {
     return pages;
   };
 
-  // ฟังก์ชันควบคุม Zoom & Pan
   const openModal = (patient: { url: string; title: string; hn: string }) => {
     setPreviewImage(patient);
     setZoomScale(1);
@@ -165,10 +166,7 @@ export default function PatientsPage() {
     setPosition({ x: 0, y: 0 });
   };
 
-  const handleZoomIn = () => {
-    setZoomScale((prev) => Math.min(prev + 0.3, 4));
-  };
-
+  const handleZoomIn = () => setZoomScale((prev) => Math.min(prev + 0.3, 4));
   const handleZoomOut = () => {
     setZoomScale((prev) => {
       const next = Math.max(prev - 0.3, 1);
@@ -176,43 +174,29 @@ export default function PatientsPage() {
       return next;
     });
   };
-
   const handleResetZoom = () => {
     setZoomScale(1);
     setPosition({ x: 0, y: 0 });
   };
 
-  // รองรับการซูมผ่าน Mouse Wheel
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    if (e.deltaY < 0) {
-      handleZoomIn();
-    } else {
-      handleZoomOut();
-    }
+    if (e.deltaY < 0) handleZoomIn();
+    else handleZoomOut();
   };
 
-  // ลากรูปภาพเมื่อซูม (Pan)
   const handleMouseDown = (e: React.MouseEvent) => {
     if (zoomScale <= 1) return;
     setIsDragging(true);
-    dragStartRef.current = {
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
-    };
+    dragStartRef.current = { x: e.clientX - position.x, y: e.clientY - position.y };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging || zoomScale <= 1) return;
-    setPosition({
-      x: e.clientX - dragStartRef.current.x,
-      y: e.clientY - dragStartRef.current.y,
-    });
+    setPosition({ x: e.clientX - dragStartRef.current.x, y: e.clientY - dragStartRef.current.y });
   };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
+  const handleMouseUp = () => setIsDragging(false);
 
   const fromRecord = total === 0 ? 0 : (page - 1) * limit + 1;
   const toRecord = Math.min(page * limit, total);
@@ -220,13 +204,12 @@ export default function PatientsPage() {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto space-y-5 pb-12">
-        {/* หัวข้อหน้า */}
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">
             ค้นหาข้อมูลประวัติผู้ป่วย
           </h1>
           <p className="text-xs sm:text-sm text-zinc-500 mt-1">
-            ค้นหาข้อมูลตามชื่อ-นามสกุล, เลขประจำตัวประชาชน, เลข HN (พิมพ์บางส่วนได้) หรือบ้านเลขที่
+            ค้นหาข้อมูลตามชื่อ-นามสกุล, เลขประจำตัวประชาชน, เลข HN หรือบ้านเลขที่
           </p>
         </div>
 
@@ -267,7 +250,7 @@ export default function PatientsPage() {
           </form>
         </div>
 
-        {/* แถบสรุปผลด้านบน */}
+        {/* แถบสรุปผล */}
         {searched && total > 0 && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm text-zinc-500 px-1">
             <div>
@@ -301,7 +284,7 @@ export default function PatientsPage() {
           <div className="py-16 text-center bg-white rounded-2xl border border-zinc-200 p-8">
             <AlertCircle className="h-10 w-10 text-zinc-300 mx-auto mb-2" />
             <p className="text-zinc-700 font-semibold text-base">ไม่พบข้อมูลผู้ป่วยที่ตรงกับเงื่อนไข</p>
-            <p className="text-xs text-zinc-400 mt-1">โปรดตรวจสอบคำค้นหาหรือลองค้นหาด้วยเลข HN บางส่วน</p>
+            <p className="text-xs text-zinc-400 mt-1">โปรดตรวจสอบคำค้นหาหรือระบุคำค้นหาอีกครั้ง</p>
           </div>
         ) : (
           <div className="space-y-5">
@@ -317,15 +300,9 @@ export default function PatientsPage() {
                     className="bg-white rounded-2xl border border-zinc-200/80 p-4 sm:p-5 shadow-xs hover:border-orange-300 transition-all flex flex-col justify-between gap-4"
                   >
                     <div className="flex gap-4 items-start">
-                      {/* รูปภาพผู้ป่วย (คลิกขยายได้) */}
+                      {/* รูปภาพ */}
                       <div
-                        onClick={() =>
-                          openModal({
-                            url: p.imageUrl,
-                            title: fullName,
-                            hn: p.hn,
-                          })
-                        }
+                        onClick={() => openModal({ url: p.imageUrl, title: fullName, hn: p.hn })}
                         className="group relative h-20 w-20 sm:h-24 sm:w-24 rounded-2xl overflow-hidden bg-zinc-100 border border-zinc-200 shrink-0 cursor-pointer shadow-2xs"
                         title="คลิกเพื่อดูรูปภาพขนาดใหญ่และซูม"
                       >
@@ -351,15 +328,29 @@ export default function PatientsPage() {
 
                       {/* ข้อมูลประจำตัว */}
                       <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 border border-orange-200">
                             HN: {p.hn}
                           </span>
+
+                          {/* แสดงป้ายชื่อชุมชน */}
+                          <span
+                            className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                              p.isInRegion
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                : "bg-zinc-100 text-zinc-600 border-zinc-200"
+                            }`}
+                          >
+                            <Building2 className="h-3 w-3 shrink-0" />
+                            <span className="truncate max-w-[120px]">{p.communityName}</span>
+                          </span>
+
                           {p.bloodgrp && (
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200">
-                              หมู่เลือด {p.bloodgrp}
+                              {p.bloodgrp}
                             </span>
                           )}
+
                           {hasMap && (
                             <a
                               href={`https://www.google.com/maps/dir/?api=1&destination=${p.home_latitude},${p.home_longitude}`}
@@ -369,7 +360,7 @@ export default function PatientsPage() {
                               title={`พิกัด: ${p.home_latitude}, ${p.home_longitude} (คลิกเพื่อนำทางด้วย Google Maps)`}
                             >
                               <Navigation className="h-3 w-3 text-emerald-600 shrink-0" />
-                              <span>มีพิกัดนำทาง</span>
+                              <span>มีพิกัด</span>
                             </a>
                           )}
                         </div>
@@ -406,25 +397,26 @@ export default function PatientsPage() {
                       </div>
 
                       <div className="flex items-center gap-2 self-stretch sm:self-auto">
-                        {hasMap && (
-                          <a
-                            href={`https://www.google.com/maps/dir/?api=1&destination=${p.home_latitude},${p.home_longitude}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-medium transition-colors"
+                        {/* ปุ่มดูรายละเอียดผู้ป่วย */}
+                        <Link href={`/patients/${p.hn}`} className="flex-1 sm:flex-none">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full sm:w-auto rounded-xl border-zinc-200 text-zinc-700 hover:bg-zinc-100 gap-1.5 text-xs cursor-pointer"
                           >
-                            <Navigation className="h-3.5 w-3.5" />
-                            <span>นำทาง</span>
-                          </a>
-                        )}
+                            <Eye className="h-3.5 w-3.5" />
+                            ดูประวัติ
+                          </Button>
+                        </Link>
 
+                        {/* ปุ่มเปิดเคสฉุกเฉิน */}
                         <Link href={`/cases/new?hn=${p.hn}`} className="flex-1 sm:flex-none">
                           <Button
                             size="sm"
-                            className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl gap-1.5 text-xs w-full sm:w-auto cursor-pointer"
+                            className="w-full sm:w-auto bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl gap-1.5 text-xs cursor-pointer"
                           >
                             <FilePlus className="h-3.5 w-3.5" />
-                            เปิดเคสฉุกเฉิน
+                            เปิดเคส
                           </Button>
                         </Link>
                       </div>
@@ -517,7 +509,7 @@ export default function PatientsPage() {
           </div>
         )}
 
-        {/* ================= LIGHTBOX MODAL WITH ZOOM & PAN ================= */}
+        {/* Modal Lightbox */}
         {previewImage && (
           <div
             onClick={closeModal}
@@ -527,14 +519,12 @@ export default function PatientsPage() {
               onClick={(e) => e.stopPropagation()}
               className="relative bg-zinc-950 rounded-3xl overflow-hidden max-w-2xl w-full shadow-2xl border border-zinc-800 flex flex-col"
             >
-              {/* ส่วนหัว Modal + ปุ่มควบคุม Zoom */}
               <div className="flex items-center justify-between p-3 sm:p-4 border-b border-zinc-800 bg-zinc-900/90 text-white z-10">
                 <div className="min-w-0 pr-2">
                   <h3 className="font-bold text-sm sm:text-base truncate">{previewImage.title}</h3>
                   <p className="text-xs text-orange-400 font-mono">HN: {previewImage.hn}</p>
                 </div>
 
-                {/* แถบเครื่องมือซูม */}
                 <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                   <button
                     type="button"
@@ -572,7 +562,6 @@ export default function PatientsPage() {
 
                   <div className="h-4 w-px bg-zinc-700 mx-1" />
 
-                  {/* ปุ่มปิด Modal */}
                   <button
                     type="button"
                     onClick={closeModal}
@@ -584,7 +573,6 @@ export default function PatientsPage() {
                 </div>
               </div>
 
-              {/* พื้นที่แสดงรูปภาพ พร้อมระบบ Zoom และ Pan */}
               <div
                 onWheel={handleWheel}
                 onMouseDown={handleMouseDown}
@@ -609,7 +597,6 @@ export default function PatientsPage() {
                   }}
                 />
 
-                {/* คำแนะนำการใช้งานด้านล่าง */}
                 <div className="absolute bottom-2.5 px-3 py-1 bg-black/60 backdrop-blur-xs text-[11px] text-zinc-400 rounded-full pointer-events-none">
                   หมุนลูกกลิ้งเมาส์เพื่อซูม {zoomScale > 1 && "• คลิกค้างเพื่อลากเลื่อนมุมมอง"}
                 </div>
