@@ -109,10 +109,22 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* ---------------- SIDEBAR (ตรึงเต็มความสูงหน้าจอตลอดเวลา) ---------------- */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col border-r border-zinc-800 transition-all duration-300 ease-in-out lg:static lg:h-full shrink-0 ${
+        className={`fixed inset-y-0 left-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col border-r border-zinc-800 transition-all duration-300 ease-in-out lg:static lg:h-full shrink-0 relative overflow-hidden ${
           mobileMenuOpen ? "translate-x-0 w-72 shadow-2xl" : "-translate-x-full lg:translate-x-0"
         } ${desktopCollapsed ? "lg:w-20" : "lg:w-64"}`}
       >
+        {/* โลโก้การแพทย์ฉุกเฉินเป็นพื้นหลังลายน้ำ (Watermark Background) จัดตำแหน่งกึ่งกลางแถบ Sidebar ด้านล่าง */}
+        <div className="absolute bottom-30 left-1/2 -translate-x-1/2 w-44 h-44 pointer-events-none opacity-35 z-0 select-none flex items-center justify-center transition-all duration-300">
+          <Image
+            src="/images/logo_ems.png"
+            alt="EMS Background Logo"
+            fill
+            sizes="176px"
+            className="object-contain p-2"
+            priority
+          />
+        </div>
+
         {/* ปุ่มพับ/กางเมนูลอยตรงกึ่งกลางขอบ Sidebar สำหรับ Desktop */}
         <button
           type="button"
@@ -129,7 +141,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </button>
 
         {/* ส่วนหัว Sidebar: โลโก้หน่วยงาน */}
-        <div className="h-16 px-4 border-b border-zinc-800/80 flex items-center justify-between shrink-0">
+        <div className="h-16 px-4 border-b border-zinc-800/80 flex items-center justify-between shrink-0 z-10 bg-zinc-950/80 backdrop-blur-sm">
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative h-10 w-10 shrink-0 bg-white p-1 rounded-xl shadow-inner">
               <Image
@@ -144,7 +156,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             {(!desktopCollapsed || mobileMenuOpen) && (
               <div className="min-w-0 truncate">
                 <h1 className="font-bold text-sm leading-tight text-white truncate">
-                  ระบบแพทย์ฉุกเฉิน
+                  ระบบการแพทย์ฉุกเฉิน
                 </h1>
                 <p className="text-xs text-orange-400 font-medium truncate">ทม.ลำพูน (EMS)</p>
               </div>
@@ -163,7 +175,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* ป้ายสถานะศูนย์วิทยุ */}
         {(!desktopCollapsed || mobileMenuOpen) ? (
-          <div className="px-3.5 py-2 mx-3 mt-3 bg-zinc-900/90 border border-zinc-800 rounded-xl flex items-center justify-between shrink-0">
+          <div className="px-3.5 py-2 mx-3 mt-3 bg-zinc-900/90 border border-zinc-800 rounded-xl flex items-center justify-between shrink-0 z-10 relative">
             <span className="text-xs text-zinc-400 flex items-center gap-1.5 font-medium truncate">
               <Radio className="h-3.5 w-3.5 text-red-500 animate-pulse shrink-0" />
               ศูนย์วิทยุ
@@ -173,13 +185,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </span>
           </div>
         ) : (
-          <div className="mt-3 flex justify-center shrink-0" title="สถานะศูนย์วิทยุ: พร้อมรับเหตุ">
+          <div className="mt-3 flex justify-center shrink-0 z-10 relative" title="สถานะศูนย์วิทยุ: พร้อมรับเหตุ">
             <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse ring-4 ring-emerald-950" />
           </div>
         )}
 
-        {/* เมนูหลักนำทาง */}
-        <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
+        {/* เมนูหลักนำทาง (z-10 เพื่อให้อยู่บนสุดเสมอ) */}
+        <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto z-10 relative">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
@@ -191,7 +203,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   isActive
                     ? "bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-md shadow-red-600/20"
-                    : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
+                    : "text-zinc-300 hover:bg-zinc-900/90 hover:text-white"
                 } ${desktopCollapsed && !mobileMenuOpen ? "justify-center px-0" : ""}`}
               >
                 <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-white" : "text-zinc-400"}`} />
@@ -204,7 +216,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* ปุ่มออกจากระบบด้านล่างสุด */}
-        <div className="p-3 border-t border-zinc-900 shrink-0">
+        <div className="p-3 border-t border-zinc-900 shrink-0 z-10 relative bg-zinc-950/80 backdrop-blur-sm">
           <Button
             onClick={handleLogout}
             variant="ghost"
@@ -219,7 +231,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* ---------------- MAIN CONTENT WRAPPER (ขัง Scroll ไว้ด้านใน) ---------------- */}
+      {/* ---------------- MAIN CONTENT WRAPPER ---------------- */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Top Header Bar */}
         <header className="h-16 bg-white border-b border-zinc-200 px-4 sm:px-6 flex items-center justify-between shadow-xs shrink-0 z-30">
@@ -320,7 +332,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* พื้นที่ Content ด้านใน: เลื่อน Scroll เฉพาะส่วนนี้ */}
+        {/* พื้นที่ Content ด้านใน */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {children}
         </main>

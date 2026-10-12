@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { LogIn, Lock, User, AlertCircle, Loader2, PhoneCall } from "lucide-react";
+import { LogIn, Lock, User, AlertCircle, Loader2, PhoneCall, ShieldAlert } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -59,26 +59,43 @@ export default function LoginPage() {
           <div className="h-2.5 bg-gradient-to-r from-red-600 via-orange-500 to-amber-500" />
 
           <div className="p-8 pb-4 text-center">
-            {/* โลโก้หน่วยงาน */}
-            <div className="flex justify-center mb-4">
-              <div className="relative h-24 w-24 p-1.5 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center">
+            {/* โลโก้คู่ (หน่วยงาน + EMS) */}
+            <div className="flex items-center justify-center gap-4 mb-5">
+              {/* โลโก้หน่วยงาน */}
+              <div className="relative h-20 w-20 p-1.5 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center transition-transform hover:scale-105">
                 <Image
                   src="/images/logo-org.png"
                   alt="ตราสัญลักษณ์ศูนย์บริการสาธารณสุขเทศบาลเมืองลำพูน"
                   fill
-                  sizes="96px"
+                  sizes="80px"
                   className="object-contain p-1"
+                  priority
+                />
+              </div>
+
+              {/* เส้นแบ่งกลาง */}
+              <div className="h-10 w-[1px] bg-slate-200" />
+
+              {/* โลโก้ระบบการแพทย์ฉุกเฉิน (EMS) */}
+              <div className="relative h-20 w-20 p-1.5 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center transition-transform hover:scale-105">
+                <Image
+                  src="/images/logo_ems.jpg"
+                  alt="โลโก้การแพทย์ฉุกเฉิน EMS"
+                  fill
+                  sizes="80px"
+                  className="object-contain p-1 rounded-xl"
                   priority
                 />
               </div>
             </div>
 
-            <span className="inline-block px-3 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full tracking-wide mb-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-700 border border-red-100 text-xs font-semibold rounded-full tracking-wide mb-3">
+              <ShieldAlert className="w-3.5 h-3.5 text-red-600" />
               หน่วยปฏิบัติการแพทย์ฉุกเฉิน (EMS)
             </span>
 
             <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
-              ระบบงานแพทย์ฉุกเฉิน
+              ระบบการแพทย์ฉุกเฉิน
             </h1>
             <p className="text-sm font-medium text-zinc-600 mt-1">
               ศูนย์บริการสาธารณสุขเทศบาลเมืองลำพูน
@@ -159,7 +176,7 @@ export default function LoginPage() {
                 ระบบเครือข่ายพร้อมทำงาน
               </span>
               <span className="flex items-center gap-1 text-zinc-500 font-medium">
-                <PhoneCall className="h-3.5 w-3.5 text-orange-600" /> สายด่วน 1669
+                <PhoneCall className="h-3.5 w-3.5 text-orange-600" /> แจ้งเหตุฉุกเฉิน 1669
               </span>
             </div>
           </CardContent>
