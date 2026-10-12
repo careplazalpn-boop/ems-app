@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -40,7 +40,7 @@ const menuItems = [
   { title: "แผนที่ติดตามรถพยาบาล", href: "/tracking", icon: MapPin },
 ];
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
+function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -122,7 +122,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    // h-dvh: ความสูงที่ถูกต้องบนเบราว์เซอร์มือถือ (ไม่โดนแถบ address bar บัง)
     <div className="h-dvh w-full flex bg-zinc-50 overflow-hidden relative">
       {/* ---------------- MOBILE OVERLAY BACKDROP ---------------- */}
       {mobileMenuOpen && (
@@ -133,17 +132,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* ---------------- SIDEBAR ----------------
-          มือถือ/แท็บเล็ต (< lg): fixed เลื่อนเข้า-ออกจากขอบซ้าย (drawer)
-          Desktop (>= lg): relative อยู่ในแถวเดียวกับเนื้อหา และย่อ/ขยายได้
-          หมายเหตุ: เดิมมีทั้ง `fixed` และ `relative` ในคลาสเดียวกัน ทำให้ `relative` ชนะ
-          เมนูจึงไม่ลอยและไม่เลื่อนออกนอกจอบนมือถือ */}
+      {/* ---------------- SIDEBAR ---------------- */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] shrink-0 bg-zinc-950 text-zinc-100 border-r border-zinc-800 transition-all duration-300 ease-in-out lg:relative lg:h-full lg:max-w-none lg:translate-x-0 ${
           mobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         } ${desktopCollapsed ? "lg:w-20" : "lg:w-64"}`}
       >
-        {/* ปุ่มพับ/กางเมนู (Desktop) — อยู่นอก wrapper ที่ overflow-hidden เพื่อไม่ให้ถูกตัดครึ่ง */}
+        {/* ปุ่มพับ/กางเมนู (Desktop) */}
         <button
           type="button"
           onClick={() => setDesktopCollapsed(!desktopCollapsed)}
@@ -213,7 +208,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           )}
 
-          {/* เมนูหลักนำทาง (ไม่ใช้ flex-1 เพื่อเหลือพื้นที่ว่างไว้ให้โลโก้ด้านล่าง) */}
+          {/* เมนูหลักนำทาง */}
           <nav className="p-3 space-y-1.5 overflow-y-auto min-h-0">
             {menuItems.map((item) => {
               const Icon = item.icon;
@@ -236,10 +231,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          {/* โลโก้ EMS: อยู่ในพื้นที่ว่างระหว่างเมนูกับปุ่มออกจากระบบ
-              - กึ่งกลางแนวตั้ง/แนวนอน และย่อให้พอดีกับความกว้าง-สูงที่เหลือ (object-contain)
-              - จางลง 70% (opacity-30)
-              - ไม่ซ้อนทับตัวหนังสือ เพราะไม่ได้อยู่ใต้ปุ่มเมนู */}
+          {/* โลโก้ EMS ด้านล่าง */}
           <div
             aria-hidden="true"
             className="relative flex-1 min-h-0 pointer-events-none select-none"
@@ -256,7 +248,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             />
           </div>
 
-          {/* ปุ่มออกจากระบบด้านล่างสุด */}
+          {/* ปุ่มออกจากระบบ */}
           <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-zinc-900 shrink-0 bg-zinc-950">
             <Button
               onClick={handleLogout}
@@ -278,7 +270,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Top Header Bar */}
         <header className="h-16 bg-white border-b border-zinc-200 px-4 sm:px-6 flex items-center justify-between shadow-xs shrink-0 z-30">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            {/* ปุ่ม Hamburger สำหรับเปิดเมนูด้านข้างบนมือถือ/แท็บเล็ต */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
@@ -289,7 +280,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <Menu className="h-5 w-5" />
             </button>
 
-            {/* โลโก้และชื่อศูนย์บริการ */}
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="h-8 w-8 rounded-lg bg-red-100 flex items-center justify-center text-red-600 shrink-0">
                 <Ambulance className="h-5 w-5" />
@@ -338,7 +328,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               />
             </button>
 
-            {/* Dropdown Items */}
             {dropdownOpen && (
               <div className="absolute right-0 mt-2 w-56 sm:w-60 bg-white rounded-2xl shadow-xl border border-zinc-100 py-1.5 z-50 text-sm animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-4 py-2.5 border-b border-zinc-100">
@@ -379,5 +368,26 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
+  );
+}
+
+// ---------------- EXPORT WRAPPER พร้อม SUSPENSE ----------------
+export function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-dvh w-full flex bg-zinc-50 overflow-hidden">
+          <div className="w-64 bg-zinc-950 border-r border-zinc-800 hidden lg:block" />
+          <div className="flex-1 flex flex-col">
+            <header className="h-16 bg-white border-b border-zinc-200 px-6 flex items-center justify-between" />
+            <main className="flex-1 p-6 flex items-center justify-center">
+              <div className="text-xs text-zinc-400 animate-pulse">กำลังเตรียมระบบ...</div>
+            </main>
+          </div>
+        </div>
+      }
+    >
+      <AppLayoutContent>{children}</AppLayoutContent>
+    </Suspense>
   );
 }
