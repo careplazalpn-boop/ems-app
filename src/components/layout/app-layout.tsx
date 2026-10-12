@@ -107,13 +107,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* ---------------- SIDEBAR (ตรึงเต็มความสูงหน้าจอตลอดเวลา) ---------------- */}
+      {/* ---------------- SIDEBAR (แก้ไขให้รองรับมือถือและ Desktop อย่างถูกต้อง) ---------------- */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col border-r border-zinc-800 transition-all duration-300 ease-in-out lg:static lg:h-full shrink-0 relative overflow-hidden ${
           mobileMenuOpen ? "translate-x-0 w-72 shadow-2xl" : "-translate-x-full lg:translate-x-0"
         } ${desktopCollapsed ? "lg:w-20" : "lg:w-64"}`}
       >
-        {/* โลโก้ลายน้ำ EMS ด้านหลังแถบเมนูด้านข้าง (แสดงเฉพาะตอนไม่พับเมนู และปรับความจางลง 70% -> opacity-30) */}
+        {/* โลโก้ลายน้ำ EMS ด้านหลังแถบเมนูด้านข้าง (จางลง 70% = opacity-30, จัดกึ่งกลาง, ไม่ทับตัวหนังสือ) */}
         {!desktopCollapsed && (
           <div className="absolute inset-0 pointer-events-none opacity-30 z-0 select-none flex items-center justify-center transition-all duration-300">
             <div className="relative w-48 h-48">
@@ -129,7 +129,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* ปุ่มพับ/กางเมนูลอยตรงกึ่งกลางขอบ Sidebar สำหรับ Desktop */}
+        {/* ปุ่มพับ/กางเมนูลอย สำหรับ Desktop */}
         <button
           type="button"
           onClick={() => setDesktopCollapsed(!desktopCollapsed)}
@@ -144,8 +144,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           )}
         </button>
 
-        {/* ส่วนหัว Sidebar: โลโก้หน่วยงาน (กำหนด z-10 เพื่อให้อยู่เหนือพื้นหลังลายน้ำเสมอ) */}
-        <div className="h-16 px-4 border-b border-zinc-800/80 flex items-center justify-between shrink-0 z-10 bg-zinc-950/9ut backdrop-blur-sm">
+        {/* ส่วนหัว Sidebar: โลโก้หน่วยงาน */}
+        <div className="h-16 px-4 border-b border-zinc-800/80 flex items-center justify-between shrink-0 z-10 bg-zinc-950/90 backdrop-blur-sm">
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative h-10 w-10 shrink-0 bg-white p-1 rounded-xl shadow-inner">
               <Image
@@ -194,7 +194,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* เมนูหลักนำทาง (z-10 เพื่อให้อยู่เหนือพื้นหลังลายน้ำและคลิกได้ปกติ) */}
+        {/* เมนูหลักนำทาง */}
         <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto z-10 relative">
           {menuItems.map((item) => {
             const Icon = item.icon;
@@ -235,12 +235,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* ---------------- MAIN CONTENT WRAPPER (ขัง Scroll ไว้ด้านใน) ---------------- */}
+      {/* ---------------- MAIN CONTENT WRAPPER ---------------- */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Top Header Bar */}
         <header className="h-16 bg-white border-b border-zinc-200 px-4 sm:px-6 flex items-center justify-between shadow-xs shrink-0 z-30">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            {/* Hamburger Button สำหรับ Mobile / Tablet */}
+            {/* ปุ่ม Hamburger สำหรับเปิดเมนูด้านข้างบนมือถือ */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
@@ -336,7 +336,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* พื้นที่ Content ด้านใน: เลื่อน Scroll เฉพาะส่วนนี้ */}
+        {/* พื้นที่ Content ด้านใน */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {children}
         </main>
