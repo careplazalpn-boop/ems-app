@@ -107,25 +107,27 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* ---------------- SIDEBAR (ตรึงเต็มความสูงหน้าจอตลอดเวลา) ---------------- */}
+      {/* ---------------- SIDEBAR (รองรับทุกขนาดหน้าจออย่างสมบูรณ์) ---------------- */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col border-r border-zinc-800 transition-all duration-300 ease-in-out lg:static lg:h-full shrink-0 relative overflow-hidden ${
           mobileMenuOpen ? "translate-x-0 w-72 shadow-2xl" : "-translate-x-full lg:translate-x-0"
         } ${desktopCollapsed ? "lg:w-20" : "lg:w-64"}`}
       >
-        {/* โลโก้การแพทย์ฉุกเฉินเป็นพื้นหลังลายน้ำ (Watermark Background) จัดตำแหน่งกึ่งกลางแถบ Sidebar ด้านล่าง */}
-        <div className="absolute bottom-30 left-1/2 -translate-x-1/2 w-44 h-44 pointer-events-none opacity-35 z-0 select-none flex items-center justify-center transition-all duration-300">
-          <Image
-            src="/images/logo_ems.png"
-            alt="EMS Background Logo"
-            fill
-            sizes="176px"
-            className="object-contain p-2"
-            priority
-          />
-        </div>
+        {/* โลโก้การแพทย์ฉุกเฉินลายน้ำ (แสดงเฉพาะตอนไม่พับเมนู เพื่อไม่ให้เกะกะสายตาในโหมดจอเล็ก/ย่อจอ) */}
+        {!desktopCollapsed && (
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-36 h-36 pointer-events-none opacity-15 z-0 select-none flex items-center justify-center transition-all duration-300">
+            <Image
+              src="/images/logo_ems.png"
+              alt="EMS Background Logo"
+              fill
+              sizes="144px"
+              className="object-contain p-2"
+              priority
+            />
+          </div>
+        )}
 
-        {/* ปุ่มพับ/กางเมนูลอยตรงกึ่งกลางขอบ Sidebar สำหรับ Desktop */}
+        {/* ปุ่มพับ/กางเมนูลอยสำหรับ Desktop */}
         <button
           type="button"
           onClick={() => setDesktopCollapsed(!desktopCollapsed)}
@@ -141,7 +143,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </button>
 
         {/* ส่วนหัว Sidebar: โลโก้หน่วยงาน */}
-        <div className="h-16 px-4 border-b border-zinc-800/80 flex items-center justify-between shrink-0 z-10 bg-zinc-950/80 backdrop-blur-sm">
+        <div className="h-16 px-4 border-b border-zinc-800/80 flex items-center justify-between shrink-0 z-10 bg-zinc-950/90 backdrop-blur-sm">
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative h-10 w-10 shrink-0 bg-white p-1 rounded-xl shadow-inner">
               <Image
@@ -163,7 +165,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          {/* ปุ่มปิดเฉพาะบนหน้าจอมือถือ */}
+          {/* ปุ่มปิดเฉพาะบนหน้าจอมือถือ/แท็บเล็ต */}
           <button
             onClick={() => setMobileMenuOpen(false)}
             className="lg:hidden text-zinc-400 hover:text-white p-1.5 rounded-lg hover:bg-zinc-900 cursor-pointer"
@@ -190,7 +192,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* เมนูหลักนำทาง (z-10 เพื่อให้อยู่บนสุดเสมอ) */}
+        {/* เมนูหลักนำทาง */}
         <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto z-10 relative">
           {menuItems.map((item) => {
             const Icon = item.icon;
@@ -216,7 +218,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* ปุ่มออกจากระบบด้านล่างสุด */}
-        <div className="p-3 border-t border-zinc-900 shrink-0 z-10 relative bg-zinc-950/80 backdrop-blur-sm">
+        <div className="p-3 border-t border-zinc-900 shrink-0 z-10 relative bg-zinc-950/90 backdrop-blur-sm">
           <Button
             onClick={handleLogout}
             variant="ghost"
@@ -236,7 +238,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Top Header Bar */}
         <header className="h-16 bg-white border-b border-zinc-200 px-4 sm:px-6 flex items-center justify-between shadow-xs shrink-0 z-30">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            {/* Hamburger Button สำหรับ Mobile / Tablet */}
+            {/* ปุ่มเปิดเมนูสำหรับมือถือและแท็บเล็ต */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
