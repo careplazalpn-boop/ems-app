@@ -34,7 +34,7 @@ interface UserProfile {
 
 const menuItems = [
   { title: "แดชบอร์ดภาพรวม", href: "/", icon: LayoutDashboard },
-  { title: "ค้นหาข้อมูลผู้ป่วย", href: "/patients", icon: UserSearch },  
+  { title: "ค้นหาข้อมูลผู้ป่วย", href: "/patients", icon: UserSearch },
   { title: "บันทึกรับแจ้งเหตุใหม่", href: "/cases/new", icon: FilePlus },
   { title: "รายการเคสฉุกเฉิน", href: "/cases", icon: ClipboardList },
   { title: "แผนที่ติดตามรถพยาบาล", href: "/tracking", icon: MapPin },
@@ -48,6 +48,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // แสดงข้อความเมนู: เสมอเมื่อเปิด drawer บนมือถือ, ส่วน Desktop ขึ้นกับสถานะย่อ/ขยาย
+  const showLabels = !desktopCollapsed || mobileMenuOpen;
 
   useEffect(() => {
     let isMounted = true;
@@ -81,9 +84,30 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // ปิด drawer อัตโนมัติเมื่อเปลี่ยนหน้า
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [pathname]);
+
+  // ปิด drawer เมื่อกด Esc
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileMenuOpen]);
+
+  // ปิด drawer เมื่อหน้าจอขยายถึงขนาด Desktop (เช่น หมุนจอแท็บเล็ต)
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setMobileMenuOpen(false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -98,38 +122,28 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="h-screen w-screen flex bg-zinc-50 overflow-hidden relative">
-      {/* ---------------- MOBILE OVERLAY BACKDROP (แสดงเฉพาะตอนเปิดเมนวมือถือ และหายไปทันทีเมื่อปิด) ---------------- */}
+    // h-dvh: ความสูงที่ถูกต้องบนเบราว์เซอร์มือถือ (ไม่โดนแถบ address bar บัง)
+    <div className="h-dvh w-full flex bg-zinc-50 overflow-hidden relative">
+      {/* ---------------- MOBILE OVERLAY BACKDROP ---------------- */}
       {mobileMenuOpen && (
         <div
           onClick={() => setMobileMenuOpen(false)}
           className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-300"
+          aria-hidden="true"
         />
       )}
 
-      {/* ---------------- SIDEBAR ---------------- */}
+      {/* ---------------- SIDEBAR ----------------
+          มือถือ/แท็บเล็ต (< lg): fixed เลื่อนเข้า-ออกจากขอบซ้าย (drawer)
+          Desktop (>= lg): relative อยู่ในแถวเดียวกับเนื้อหา และย่อ/ขยายได้
+          หมายเหตุ: เดิมมีทั้ง `fixed` และ `relative` ในคลาสเดียวกัน ทำให้ `relative` ชนะ
+          เมนูจึงไม่ลอยและไม่เลื่อนออกนอกจอบนมือถือ */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col border-r border-zinc-800 transition-all duration-300 ease-in-out lg:static lg:h-full shrink-0 relative overflow-hidden ${
-          mobileMenuOpen ? "translate-x-0 w-72 shadow-2xl" : "-translate-x-full lg:translate-x-0"
+        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] shrink-0 bg-zinc-950 text-zinc-100 border-r border-zinc-800 transition-all duration-300 ease-in-out lg:relative lg:h-full lg:max-w-none lg:translate-x-0 ${
+          mobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         } ${desktopCollapsed ? "lg:w-20" : "lg:w-64"}`}
       >
-        {/* โลโก้ลายน้ำ EMS (ซ่อนบนจอมือถือเพื่อไม่ให้ทับตัวหนังสือ และแสดงเฉพาะบนจอแท็บเล็ต/คอมพิวเตอร์) */}
-        {!desktopCollapsed && (
-          <div className="absolute inset-0 pointer-events-none opacity-30 z-0 select-none hidden lg:flex items-center justify-center transition-all duration-300">
-            <div className="relative w-40 h-40">
-              <Image
-                src="/images/logo_ems.png"
-                alt="EMS Watermark Background"
-                fill
-                sizes="160px"
-                className="object-contain p-2"
-                priority
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ปุ่มพับ/กางเมนูลอย สำหรับ Desktop */}
+        {/* ปุ่มพับ/กางเมนู (Desktop) — อยู่นอก wrapper ที่ overflow-hidden เพื่อไม่ให้ถูกตัดครึ่ง */}
         <button
           type="button"
           onClick={() => setDesktopCollapsed(!desktopCollapsed)}
@@ -144,94 +158,118 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           )}
         </button>
 
-        {/* ส่วนหัว Sidebar: โลโก้หน่วยงาน */}
-        <div className="h-16 px-4 border-b border-zinc-800/80 flex items-center justify-between shrink-0 z-10 bg-zinc-950/90 backdrop-blur-sm">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="relative h-10 w-10 shrink-0 bg-white p-1 rounded-xl shadow-inner">
-              <Image
-                src="/images/logo-org.png"
-                alt="Logo"
-                fill
-                sizes="40px"
-                className="object-contain"
-                priority
-              />
-            </div>
-            {(!desktopCollapsed || mobileMenuOpen) && (
-              <div className="min-w-0 truncate">
-                <h1 className="font-bold text-sm leading-tight text-white truncate">
-                  ระบบแพทย์ฉุกเฉิน
-                </h1>
-                <p className="text-xs text-orange-400 font-medium truncate">ทม.ลำพูน (EMS)</p>
+        <div className="flex h-full flex-col overflow-hidden">
+          {/* ส่วนหัว Sidebar: โลโก้หน่วยงาน */}
+          <div className="h-16 px-4 border-b border-zinc-800/80 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative h-10 w-10 shrink-0 bg-white p-1 rounded-xl shadow-inner">
+                <Image
+                  src="/images/logo-org.png"
+                  alt="Logo"
+                  fill
+                  sizes="40px"
+                  className="object-contain"
+                  priority
+                />
               </div>
-            )}
+              {showLabels && (
+                <div className="min-w-0 truncate">
+                  <h1 className="font-bold text-sm leading-tight text-white truncate">
+                    ระบบแพทย์ฉุกเฉิน
+                  </h1>
+                  <p className="text-xs text-orange-400 font-medium truncate">ทม.ลำพูน (EMS)</p>
+                </div>
+              )}
+            </div>
+
+            {/* ปุ่มปิดเฉพาะบนหน้าจอมือถือ */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="lg:hidden text-zinc-400 hover:text-white p-2 -mr-1 rounded-lg hover:bg-zinc-900 cursor-pointer"
+              aria-label="ปิดเมนู"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
 
-          {/* ปุ่มปิดเฉพาะบนหน้าจอมือถือ */}
-          <button
-            onClick={() => setMobileMenuOpen(false)}
-            className="lg:hidden text-zinc-400 hover:text-white p-1.5 rounded-lg hover:bg-zinc-900 cursor-pointer"
-            aria-label="ปิดเมนู"
+          {/* ป้ายสถานะศูนย์วิทยุ */}
+          {showLabels ? (
+            <div className="px-3.5 py-2 mx-3 mt-3 bg-zinc-900/90 border border-zinc-800 rounded-xl flex items-center justify-between shrink-0">
+              <span className="text-xs text-zinc-400 flex items-center gap-1.5 font-medium truncate">
+                <Radio className="h-3.5 w-3.5 text-red-500 animate-pulse shrink-0" />
+                ศูนย์วิทยุ
+              </span>
+              <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/70 px-2 py-0.5 rounded-full border border-emerald-800/50 shrink-0">
+                พร้อมรับเหตุ
+              </span>
+            </div>
+          ) : (
+            <div
+              className="mt-3 flex justify-center shrink-0"
+              title="สถานะศูนย์วิทยุ: พร้อมรับเหตุ"
+            >
+              <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse ring-4 ring-emerald-950" />
+            </div>
+          )}
+
+          {/* เมนูหลักนำทาง (ไม่ใช้ flex-1 เพื่อเหลือพื้นที่ว่างไว้ให้โลโก้ด้านล่าง) */}
+          <nav className="p-3 space-y-1.5 overflow-y-auto min-h-0">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={!showLabels ? item.title : undefined}
+                  className={`flex items-center gap-3 px-3 py-3 lg:py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    isActive
+                      ? "bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-md shadow-red-600/20"
+                      : "text-zinc-300 hover:bg-zinc-900/90 hover:text-white"
+                  } ${!showLabels ? "justify-center px-0" : ""}`}
+                >
+                  <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-white" : "text-zinc-400"}`} />
+                  {showLabels && <span className="truncate">{item.title}</span>}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* โลโก้ EMS: อยู่ในพื้นที่ว่างระหว่างเมนูกับปุ่มออกจากระบบ
+              - กึ่งกลางแนวตั้ง/แนวนอน และย่อให้พอดีกับความกว้าง-สูงที่เหลือ (object-contain)
+              - จางลง 70% (opacity-30)
+              - ไม่ซ้อนทับตัวหนังสือ เพราะไม่ได้อยู่ใต้ปุ่มเมนู */}
+          <div
+            aria-hidden="true"
+            className="relative flex-1 min-h-0 pointer-events-none select-none"
           >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* ป้ายสถานะศูนย์วิทยุ */}
-        {(!desktopCollapsed || mobileMenuOpen) ? (
-          <div className="px-3.5 py-2 mx-3 mt-3 bg-zinc-900/90 border border-zinc-800 rounded-xl flex items-center justify-between shrink-0 z-10 relative">
-            <span className="text-xs text-zinc-400 flex items-center gap-1.5 font-medium truncate">
-              <Radio className="h-3.5 w-3.5 text-red-500 animate-pulse shrink-0" />
-              ศูนย์วิทยุ
-            </span>
-            <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/70 px-2 py-0.5 rounded-full border border-emerald-800/50 shrink-0">
-              พร้อมรับเหตุ
-            </span>
+            <Image
+              src="/images/logo_ems.png"
+              alt=""
+              fill
+              sizes="(min-width: 1024px) 256px, 288px"
+              className={`object-contain opacity-30 transition-all duration-300 ${
+                showLabels ? "p-6" : "p-2"
+              }`}
+              priority
+            />
           </div>
-        ) : (
-          <div className="mt-3 flex justify-center shrink-0 z-10 relative" title="สถานะศูนย์วิทยุ: พร้อมรับเหตุ">
-            <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse ring-4 ring-emerald-950" />
+
+          {/* ปุ่มออกจากระบบด้านล่างสุด */}
+          <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-zinc-900 shrink-0 bg-zinc-950">
+            <Button
+              onClick={handleLogout}
+              variant="ghost"
+              className={`w-full text-red-400 hover:text-red-300 hover:bg-zinc-900 gap-2.5 rounded-xl text-sm cursor-pointer ${
+                !showLabels ? "justify-center px-0" : "justify-start"
+              }`}
+              title="ออกจากระบบ"
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              {showLabels && <span>ออกจากระบบ</span>}
+            </Button>
           </div>
-        )}
-
-        {/* เมนูหลักนำทาง */}
-        <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto z-10 relative">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={desktopCollapsed && !mobileMenuOpen ? item.title : undefined}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  isActive
-                    ? "bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-md shadow-red-600/20"
-                    : "text-zinc-300 hover:bg-zinc-900/90 hover:text-white"
-                } ${desktopCollapsed && !mobileMenuOpen ? "justify-center px-0" : ""}`}
-              >
-                <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-white" : "text-zinc-400"}`} />
-                {(!desktopCollapsed || mobileMenuOpen) && (
-                  <span className="truncate">{item.title}</span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* ปุ่มออกจากระบบด้านล่างสุด */}
-        <div className="p-3 border-t border-zinc-900 shrink-0 z-10 relative bg-zinc-950/90 backdrop-blur-sm">
-          <Button
-            onClick={handleLogout}
-            variant="ghost"
-            className={`w-full text-red-400 hover:text-red-300 hover:bg-zinc-900 gap-2.5 rounded-xl text-sm cursor-pointer ${
-              desktopCollapsed && !mobileMenuOpen ? "justify-center px-0" : "justify-start"
-            }`}
-            title="ออกจากระบบ"
-          >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {(!desktopCollapsed || mobileMenuOpen) && <span>ออกจากระบบ</span>}
-          </Button>
         </div>
       </aside>
 
@@ -240,12 +278,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Top Header Bar */}
         <header className="h-16 bg-white border-b border-zinc-200 px-4 sm:px-6 flex items-center justify-between shadow-xs shrink-0 z-30">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            {/* ปุ่มเปิดเมนูด้านข้างบนมือถือ */}
+            {/* ปุ่ม Hamburger สำหรับเปิดเมนูด้านข้างบนมือถือ/แท็บเล็ต */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
               className="lg:hidden p-2 -ml-2 rounded-xl text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors cursor-pointer"
               aria-label="เปิดเมนูนำทาง"
+              aria-expanded={mobileMenuOpen}
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -337,9 +376,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* พื้นที่ Content ด้านใน */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );
