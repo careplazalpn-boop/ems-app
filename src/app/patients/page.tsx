@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { 
   Search, 
@@ -21,7 +21,8 @@ import {
   ZoomOut,
   RotateCcw,
   Building2,
-  Eye
+  Eye,
+  Filter
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,10 @@ export default function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+
+  // สเตตสำหรับ Filter เสริม
+  const [regionFilter, setRegionFilter] = useState<"ALL" | "IN" | "OUT">("ALL");
+  const [mapFilter, setMapFilter] = useState<"ALL" | "HAS_MAP" | "NO_MAP">("ALL");
 
   // สเตต Lightbox
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string; hn: string } | null>(null);
@@ -130,6 +135,22 @@ export default function PatientsPage() {
     setPage(1);
     fetchPatients(query, 1, newLimit);
   };
+
+  // กรองข้อมูลตามเงื่อนไขที่เลือก (ในเขต / นอกเขต / มีพิกัด)
+  const filteredPatients = useMemo(() => {
+    return patients.filter((p) => {
+      // กรองตามเขต
+      if (regionFilter === "IN" && !p.isInRegion) return false;
+      if (regionFilter === "OUT" && p.isInRegion) return false;
+
+      // กรองตามพิกัด
+      const hasCoords = hasValidCoordinates(p.home_latitude, p.home_longitude);
+      if (mapFilter === "HAS_MAP" && !hasCoords) return false;
+      if (mapFilter === "NO_MAP" && hasCoords) return false;
+
+      return true;
+    });
+  }, [patients, regionFilter, mapFilter]);
 
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
@@ -221,7 +242,7 @@ export default function PatientsPage() {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="พิมพ์ชื่อ สกุล, HN (เช่น 21), เลขบัตร ปชช. หรือบ้านเลขที่..."
+                placeholder="พิมพ์ชื่อ สกุล, HN, เลขบัตร ปชช. หรือบ้านเลขที่..."
                 className="pl-10 pr-9 rounded-xl border-zinc-200 focus:border-orange-500 h-11 text-sm bg-zinc-50/50"
               />
               {query && (
@@ -250,12 +271,117 @@ export default function PatientsPage() {
           </form>
         </div>
 
+        {/* แถบตัวกรองเพิ่มเติม (Filter Chips) จะแสดงเมื่อมีการค้นหาและมีข้อมูล */}
+        {searched && patients.length > 0 && (
+          <div className="bg-white p-3.5 rounded-2xl border border-zinc-200/80 shadow-2xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-zinc-600 font-medium">
+                <Filter className="h-3.5 w-3.5 text-orange-600" />
+                <span>ตัวกรองผลลัพธ์:</span>
+              </div>
+
+              {/* ปุ่มเคลียร์ตัวกรอง */}
+              {(regionFilter !== "ALL" || mapFilter !== "ALL") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRegionFilter("ALL");
+                    setMapFilter("ALL");
+                  }}
+                  className="text-orange-600 hover:text-orange-700 font-semibold cursor-pointer underline underline-offset-2"
+                >
+                  ล้างตัวกรองทั้งหมด
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-0.5">
+              {/* กลุ่มตัวกรองพื้นที่รับผิดชอบ */}
+              <div className="inline-flex rounded-xl bg-zinc-100 p-1 border border-zinc-200/70">
+                <button
+                  type="button"
+                  onClick={() => setRegionFilter("ALL")}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    regionFilter === "ALL"
+                      ? "bg-white text-zinc-900 shadow-2xs font-semibold"
+                      : "text-zinc-600 hover:text-zinc-900"
+                  }`}
+                >
+                  ทุกพื้นที่
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRegionFilter("IN")}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    regionFilter === "IN"
+                      ? "bg-indigo-600 text-white shadow-2xs font-semibold"
+                      : "text-zinc-600 hover:text-zinc-900"
+                  }`}
+                >
+                  <Building2 className="h-3 w-3" />
+                  เฉพาะในเขต
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRegionFilter("OUT")}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    regionFilter === "OUT"
+                      ? "bg-zinc-800 text-white shadow-2xs font-semibold"
+                      : "text-zinc-600 hover:text-zinc-900"
+                  }`}
+                >
+                  เฉพาะนอกเขต
+                </button>
+              </div>
+
+              {/* กลุ่มตัวกรองพิกัด GPS */}
+              <div className="inline-flex rounded-xl bg-zinc-100 p-1 border border-zinc-200/70">
+                <button
+                  type="button"
+                  onClick={() => setMapFilter("ALL")}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    mapFilter === "ALL"
+                      ? "bg-white text-zinc-900 shadow-2xs font-semibold"
+                      : "text-zinc-600 hover:text-zinc-900"
+                  }`}
+                >
+                  พิกัดทั้งหมด
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapFilter("HAS_MAP")}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    mapFilter === "HAS_MAP"
+                      ? "bg-emerald-600 text-white shadow-2xs font-semibold"
+                      : "text-zinc-600 hover:text-zinc-900"
+                  }`}
+                >
+                  <Navigation className="h-3 w-3" />
+                  เฉพาะมีพิกัดบ้าน
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapFilter("NO_MAP")}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    mapFilter === "NO_MAP"
+                      ? "bg-amber-600 text-white shadow-2xs font-semibold"
+                      : "text-zinc-600 hover:text-zinc-900"
+                  }`}
+                >
+                  ยังไม่มีพิกัด
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* แถบสรุปผล */}
         {searched && total > 0 && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm text-zinc-500 px-1">
             <div>
-              กำลังแสดงรายการที่ <span className="font-semibold text-zinc-800">{fromRecord} - {toRecord}</span> จากทั้งหมด{" "}
-              <span className="font-semibold text-zinc-800">{total}</span> รายการ
+              กำลังแสดง <span className="font-semibold text-zinc-800">{filteredPatients.length}</span> คน
+              {(regionFilter !== "ALL" || mapFilter !== "ALL") && " (กรองจากหน้านี้)"} จากรายการที่ดึงมา{" "}
+              <span className="font-semibold text-zinc-800">{patients.length}</span> คน (ทั้งหมด {total} รายการ)
             </div>
 
             <div className="flex items-center gap-2">
@@ -280,16 +406,18 @@ export default function PatientsPage() {
           <div className="py-16 text-center text-zinc-400 text-sm">
             กำลังค้นหาข้อมูลในระบบฐานข้อมูล...
           </div>
-        ) : searched && patients.length === 0 ? (
+        ) : searched && filteredPatients.length === 0 ? (
           <div className="py-16 text-center bg-white rounded-2xl border border-zinc-200 p-8">
             <AlertCircle className="h-10 w-10 text-zinc-300 mx-auto mb-2" />
-            <p className="text-zinc-700 font-semibold text-base">ไม่พบข้อมูลผู้ป่วยที่ตรงกับเงื่อนไข</p>
-            <p className="text-xs text-zinc-400 mt-1">โปรดตรวจสอบคำค้นหาหรือระบุคำค้นหาอีกครั้ง</p>
+            <p className="text-zinc-700 font-semibold text-base">ไม่พบข้อมูลตามเงื่อนไขตัวกรอง</p>
+            <p className="text-xs text-zinc-400 mt-1">
+              ลองเลือกตัวกรองเป็น "ทุกพื้นที่" หรือ "พิกัดทั้งหมด" เพื่อดูรายการอื่น
+            </p>
           </div>
         ) : (
           <div className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {patients.map((p) => {
+              {filteredPatients.map((p) => {
                 const fullName = `${p.pname || ""}${p.fname || ""} ${p.lname || ""}`.trim();
                 const isDeceased = p.death === "Y" || p.death === "1";
                 const hasMap = hasValidCoordinates(p.home_latitude, p.home_longitude);
@@ -397,7 +525,6 @@ export default function PatientsPage() {
                       </div>
 
                       <div className="flex items-center gap-2 self-stretch sm:self-auto">
-                        {/* ปุ่มดูรายละเอียดผู้ป่วย */}
                         <Link href={`/patients/${p.hn}`} className="flex-1 sm:flex-none">
                           <Button
                             variant="outline"
@@ -409,7 +536,6 @@ export default function PatientsPage() {
                           </Button>
                         </Link>
 
-                        {/* ปุ่มเปิดเคสฉุกเฉิน */}
                         <Link href={`/cases/new?hn=${p.hn}`} className="flex-1 sm:flex-none">
                           <Button
                             size="sm"
