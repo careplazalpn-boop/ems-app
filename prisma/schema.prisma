@@ -7,93 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model assessmentresult {
-  AssessmentID   Int      @id @default(autoincrement())
-  RequestID      Int
-  IsBedridden    Boolean
-  IsDependent    Boolean
-  IsUnattended   Boolean
-  IsImpoverished Boolean
-  IsHomeless     Boolean
-  IsDisabled     Boolean
-  OtherComments  String?  @db.VarChar(100)
-  user_id        Int
-  AssessmentDate DateTime @db.DateTime(0)
-  OverallStatus  Decimal? @db.Decimal(10, 2)
-  other          String?  @db.VarChar(100)
-
-  @@index([RequestID], map: "RequestID")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model booking {
-  bookingID      Int      @id @default(autoincrement())
-  RequestID      Int
-  booking_type   Int
-  trip_type      Int
-  start_date     DateTime @db.Date
-  end_date       DateTime @db.Date
-  pickup_time    DateTime @db.Time(0)
-  recurring_days String   @db.VarChar(200)
-  status         Int
-  created_at     DateTime @db.DateTime(0)
-
-  @@index([start_date, end_date, pickup_time], map: "idx_booking_date_pickup")
-  @@index([start_date, end_date], map: "idx_booking_dates")
-  @@index([status], map: "idx_booking_status")
-  @@index([RequestID], map: "idx_request_id")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model booking_log_images {
-  id         Int      @id @default(autoincrement())
-  log_id     Int
-  image_url  String?  @db.VarChar(255)
-  caption    String?  @db.VarChar(150)
-  is_primary Boolean? @default(false)
-  created_at DateTime @default(now()) @db.DateTime(0)
-
-  @@index([log_id], map: "idx_log_id")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model booking_log_staffs {
-  id           Int                           @id @default(autoincrement())
-  log_id       Int
-  user_id      Int
-  role_type    booking_log_staffs_role_type? @default(assistant)
-  booking_logs booking_logs                  @relation(fields: [log_id], references: [id], onDelete: Cascade, map: "fk_log_staff_log")
-
-  @@index([log_id, user_id], map: "idx_log_user")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model booking_logs {
-  id                 Int                  @id @default(autoincrement())
-  bookingID          Int
-  vehicle_id         Int
-  user_id            Int
-  job_date           DateTime             @db.DateTime(0)
-  job_type           Int
-  status             Int
-  note               String               @db.VarChar(200)
-  created_at         DateTime             @db.DateTime(0)
-  trip_type_log      Int?                 @default(1)
-  start_time         DateTime?            @db.DateTime(0)
-  end_time           DateTime?            @db.DateTime(0)
-  return_start_time  DateTime?            @db.DateTime(0)
-  return_end_time    DateTime?            @db.DateTime(0)
-  mileage_start      Decimal?             @db.Decimal(10, 2)
-  mileage_end        Decimal?             @db.Decimal(10, 2)
-  booking_log_staffs booking_log_staffs[]
-
-  @@index([job_date, bookingID], map: "idx_job_date_booking")
-  @@index([bookingID, job_date], map: "idx_log_booking_jobdate")
-  @@index([job_date], map: "idx_log_job_date")
-  @@index([job_date, bookingID, id], map: "idx_log_jobdate_booking_id")
-  @@index([status], map: "idx_log_status")
-}
+// =========================================================================
+// 1. ตารางเดิมของระบบหลัก (จำกัดสิทธิ์ในระดับ MariaDB: ดู/แก้ได้ตามเงื่อนไข ห้ามลบ)
+// =========================================================================
 
 model patient {
   id                  Int       @id @default(autoincrement())
@@ -150,88 +66,6 @@ model patient_image {
   @@index([image_name], map: "ix_image_name")
 }
 
-model requestimage {
-  image_id    Int      @id @default(autoincrement())
-  RequestID   Int
-  image_url   String?  @db.VarChar(200)
-  caption     String?  @db.VarChar(100)
-  upload_date DateTime @db.DateTime(0)
-
-  @@index([RequestID], map: "RequestID")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model requesttransport {
-  RequestID           Int      @id @default(autoincrement())
-  PatientHN           String?  @db.VarChar(10)
-  CID                 String?  @db.VarChar(13)
-  PatientName         String   @db.VarChar(50)
-  PatientAge          Int?
-  Diagnosis           String?  @db.VarChar(200)
-  ReasonTransport     String?  @db.VarChar(150)
-  address             String?  @db.VarChar(100)
-  village             Int
-  contactname         String?  @db.VarChar(50)
-  phone               String?  @db.VarChar(30)
-  PickupLocation      String?  @db.VarChar(100)
-  DestinationLocation String?  @db.VarChar(100)
-  RequestDate         DateTime @db.DateTime(0)
-  PatientLatitude     Decimal? @db.Decimal(10, 8)
-  PatientLongitude    Decimal? @db.Decimal(11, 8)
-  Comment             String?  @db.VarChar(200)
-  OverallStatusID     Int?
-  expand              String?  @db.VarChar(200)
-  user_id             Int?
-  created_at          DateTime @db.DateTime(0)
-
-  @@index([CID], map: "idx_req_cid")
-  @@index([RequestDate], map: "idx_req_date")
-  @@index([PatientHN], map: "idx_req_hn")
-  @@index([PatientName], map: "idx_req_name")
-  @@index([OverallStatusID], map: "idx_req_status")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model statustype {
-  id           Int     @id @default(autoincrement())
-  status_name  String  @db.VarChar(50)
-  status_code  Int
-  color_code   String  @db.VarChar(30)
-  is_final     Boolean @default(false)
-  sort_order   Int
-  descriptions String? @db.VarChar(100)
-
-  @@index([status_code], map: "idx_status_code")
-}
-
-model thaiaddress {
-  addressid    String  @id @db.VarChar(6)
-  name         String? @db.VarChar(50)
-  chwpart      String? @db.Char(2)
-  amppart      String? @db.Char(2)
-  tmbpart      String? @db.Char(2)
-  codetype     String? @db.Char(1)
-  pocode       String? @db.VarChar(5)
-  full_name    String? @db.VarChar(250)
-  hos_guid     String? @db.VarChar(38)
-  hos_guid_ext String? @db.VarChar(64)
-
-  @@index([amppart], map: "amppart")
-  @@index([chwpart], map: "chwpart")
-  @@index([codetype], map: "codetype")
-  @@index([chwpart, amppart, tmbpart], map: "idx_address_compound")
-  @@index([chwpart, amppart, codetype], map: "ix_chwpart_amp_codetype")
-  @@index([codetype, chwpart, amppart], map: "ix_chwpart_amp_codetype_index")
-  @@index([chwpart, amppart, tmbpart, codetype], map: "ix_chwpart_amp_tmb_codetype")
-  @@index([amppart, chwpart, codetype, tmbpart], map: "ix_chwpart_amp_tmb_codetype_index")
-  @@index([chwpart, codetype], map: "ix_chwpart_codetype")
-  @@index([codetype, chwpart], map: "ix_chwpart_codetype_index")
-  @@index([hos_guid], map: "ix_hos_guid")
-  @@index([hos_guid_ext], map: "ix_hos_guid_ext")
-  @@index([name], map: "name")
-  @@index([tmbpart], map: "tmbpart")
-}
-
 model users {
   user_id    Int       @id @default(autoincrement())
   fullname   String    @db.VarChar(50)
@@ -245,20 +79,10 @@ model users {
   img        Bytes     @db.MediumBlob
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model users_image {
   id       Int   @id @default(autoincrement())
   users_id Int
   img      Bytes @db.MediumBlob
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model vehicles {
-  vehicle_id   Int              @id @default(autoincrement())
-  plate_number String           @db.VarChar(50)
-  vehicle_type String?          @db.VarChar(50)
-  brand        String?          @db.VarChar(50)
-  status       vehicles_status? @default(active)
 }
 
 model village {
@@ -307,15 +131,7 @@ model village {
   @@index([village_guid], map: "ix_village_guid")
 }
 
-enum booking_log_staffs_role_type {
-  driver
-  assistant
-  medic
-}
+// =========================================================================
+// 2. ตารางของระบบ EMS (ขึ้นต้นด้วย ems_ จัดการเพิ่ม/ลบ/แก้ไขได้เต็มที่)
+// =========================================================================
 
-enum vehicles_status {
-  active
-  maintenance
-  inactive
-  reserve
-}

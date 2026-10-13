@@ -44,6 +44,5 @@ next-env.d.ts
 public/uploads/patient/*
 !public/uploads/patient/.gitkeep
 
-
 /src/generated/prisma
 
