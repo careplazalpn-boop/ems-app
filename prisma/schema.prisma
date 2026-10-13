@@ -132,6 +132,151 @@ model village {
 }
 
 // =========================================================================
-// 2. ตารางของระบบ EMS (ขึ้นต้นด้วย ems_ จัดการเพิ่ม/ลบ/แก้ไขได้เต็มที่)
+// โมเดลระบบ EMS ใหม่ (Prefix ems_ จัดการได้เต็มที่ ปลอดภัยต่อระบบเดิม)
 // =========================================================================
 
+// 1. ผู้ป่วยใหม่ / คนต่างชาติ / บันทึกหน้างาน
+model ems_patients {
+  id              Int          @id @default(autoincrement())
+  id_type         String       @default("CID") @db.VarChar(20) // CID, PASSPORT, FOREIGN_ID, UNKNOWN
+  id_card_no      String?      @db.VarChar(20)                 // เลขบัตรประชาชน หรือเลขบัตรชมพู
+  passport_no     String?      @db.VarChar(30)                 // เลขพาสปอร์ตสำหรับชาวต่างชาติ
+  nationality     String?      @default("THA") @db.VarChar(10) // สัญชาติ เช่น THA, MMR, LAO, USA
+  citizenship     String?      @db.VarChar(10)                 // เชื้อชาติ
+  pname           String?      @db.VarChar(30)
+  fname           String       @db.VarChar(50)
+  lname           String?      @db.VarChar(50)
+  pname_en        String?      @db.VarChar(30)                 // ชื่อภาษาอังกฤษ (ถ้ามี)
+  fname_en        String?      @db.VarChar(50)
+  lname_en        String?      @db.VarChar(50)
+  gender          String?      @db.VarChar(10)                 // male, female, other
+  age             Int?
+  birthday        DateTime?    @db.Date
+  phone           String?      @db.VarChar(30)
+  address_full    String?      @db.VarChar(255)
+  is_identified   Boolean      @default(true)                  // false กรณีคนไข้นิรนาม ไม่ทราบชื่อ
+  merged_hn       String?      @db.VarChar(10)                 // เก็บ HN ถ้าภายหลังนำไปผูกกับตาราง patient หลัก
+  merged_at       DateTime?    @db.DateTime(0)
+  created_at      DateTime     @default(now()) @db.DateTime(0)
+  updated_at      DateTime     @updatedAt @db.DateTime(0)
+
+  ems_cases       ems_cases[]
+
+  @@index([id_card_no], map: "idx_ems_pt_cid")
+  @@index([passport_no], map: "idx_ems_pt_passport")
+  @@index([fname, lname], map: "idx_ems_pt_name")
+}
+
+// 2. ข้อมูลเคสรับแจ้งเหตุ และสิทธิการรักษาขณะเกิดเหตุ
+model ems_cases {
+  id                  Int               @id @default(autoincrement())
+  case_number         String            @unique @db.VarChar(30) // เช่น EMS-202610-0001
+  patient_source      String            @default("HOSPITAL") @db.VarChar(20) // HOSPITAL หรือ TEMPORARY
+  patient_hn          String?           @db.VarChar(10)          // อ้างอิง HN จากตาราง patient เดิม
+  ems_patient_id      Int?              // อ้างอิงจาก ems_patients ถ้าเป็นคนไข้ใหม่/ต่างชาติ
+  
+  // สิทธิการรักษา ณ ขณะเกิดเหตุ (Snapshot)
+  insurance_type      String?           @db.VarChar(30)          // UC, SSS, CS, ACT, FOREIGNER, PAYMENT
+  insurance_code      String?           @db.VarChar(50)          // เลขที่สิทธิ
+  insurance_hosp_code String?           @db.VarChar(20)          // รหัส รพ. ตามสิทธิ
+
+  caller_name         String?           @db.VarChar(100)
+  caller_phone        String?           @db.VarChar(30)
+  incident_address    String            @db.VarChar(255)
+  latitude            Decimal?          @db.Decimal(10, 8)
+  longitude           Decimal?          @db.Decimal(11, 8)
+  chief_complaint     String?           @db.VarChar(255)
+  triage_level        String            @default("yellow") @db.VarChar(20) // red, yellow, green, white
+  status              String            @default("pending") @db.VarChar(30) // pending, dispatched, on_scene, completed, cancelled
+  created_at          DateTime          @default(now()) @db.DateTime(0)
+  updated_at          DateTime          @updatedAt @db.DateTime(0)
+
+  ems_patient         ems_patients?     @relation(fields: [ems_patient_id], references: [id])
+  dispatches          ems_dispatches[]
+  treatments          ems_treatments[]
+  images              ems_case_images[]
+
+  @@index([patient_hn], map: "idx_ems_case_hn")
+  @@index([ems_patient_id], map: "idx_ems_case_temp_pt")
+  @@index([status], map: "idx_ems_case_status")
+}
+
+// 3. ข้อมูลการส่งรถปฏิบัติการ
+model ems_dispatches {
+  id                    Int                   @id @default(autoincrement())
+  case_id               Int
+  vehicle_id            Int?                  // อ้างอิง vehicles.vehicle_id เดิม
+  time_dispatched       DateTime?             @db.DateTime(0)
+  time_departed         DateTime?             @db.DateTime(0)
+  time_arrived_scene    DateTime?             @db.DateTime(0)
+  time_departed_scene   DateTime?             @db.DateTime(0)
+  time_arrived_hospital DateTime?             @db.DateTime(0)
+  destination_hospital  String?               @db.VarChar(150)
+  
+  ems_case              ems_cases             @relation(fields: [case_id], references: [id], onDelete: Cascade)
+  staffs                ems_dispatch_staffs[]
+
+  @@index([case_id], map: "idx_dispatch_case_id")
+}
+
+// 4. เจ้าหน้าที่ผู้ร่วมปฏิบัติงานในแต่ละ Dispatch
+model ems_dispatch_staffs {
+  id          Int            @id @default(autoincrement())
+  dispatch_id Int
+  user_id     Int            // อ้างอิง users.user_id เดิม
+  role_type   String         @default("assistant") @db.VarChar(30) // driver, team_leader, nurse, paramedic, emt
+  note        String?        @db.VarChar(100)
+
+  dispatch    ems_dispatches @relation(fields: [dispatch_id], references: [id], onDelete: Cascade)
+
+  @@index([dispatch_id, user_id], map: "idx_dispatch_staff_user")
+}
+
+// 5. บันทึกสัญญาณชีพและการรักษาเบื้องต้น
+model ems_treatments {
+  id               Int       @id @default(autoincrement())
+  case_id          Int
+  recorded_at      DateTime  @default(now()) @db.DateTime(0)
+  bp_systolic      Int?
+  bp_diastolic     Int?
+  pulse_rate       Int?
+  respiratory_rate Int?
+  spo2             Int?
+  interventions    String?   @db.Text
+
+  ems_case         ems_cases @relation(fields: [case_id], references: [id], onDelete: Cascade)
+
+  @@index([case_id], map: "idx_treatment_case_id")
+}
+
+// 6. รูปภาพขณะปฏิบัติงาน
+model ems_case_images {
+  id         Int       @id @default(autoincrement())
+  case_id    Int
+  image_type String    @default("SCENE") @db.VarChar(30) // SCENE, TREATMENT, VEHICLE, DOCUMENT
+  image_url  String    @db.VarChar(255)
+  caption    String?   @db.VarChar(200)
+  created_by Int?      // user_id ของผู้ถ่าย/อัปโหลด
+  created_at DateTime  @default(now()) @db.DateTime(0)
+
+  ems_case   ems_cases @relation(fields: [case_id], references: [id], onDelete: Cascade)
+
+  @@index([case_id], map: "idx_case_image_case_id")
+}
+
+model nationality {
+  nationality String  @id @db.Char(3)
+  name        String? @db.VarChar(50)
+  nhso_code   String? @db.VarChar(3)
+  hos_guid    String? @db.VarChar(38)
+  zip09_code  String? @db.VarChar(10)
+  inv_unuse   String? @db.Char(1)
+}
+
+model vehicles {
+  vehicle_id   Int     @id @default(autoincrement())
+  plate_number String  @db.VarChar(50)
+  vehicle_type String? @db.VarChar(50)
+  brand        String? @db.VarChar(50)
+  status       String? @default("active") @db.VarChar(30)
+}
