@@ -749,17 +749,19 @@ function NewCaseFormContent() {
         </form>
       </div>
 
-      {/* Modal Popup เลือกผู้ป่วย: ไม่แสดงเพศ, แสดงอายุและถนน */}
+      {/* Modal Popup เลือกผู้ป่วย พร้อมระบบ Scroll แนวนอนบนมือถือ */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
-            <div className="p-4 px-6 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
+            
+            {/* Modal Header */}
+            <div className="p-4 px-5 sm:px-6 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
               <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-200/50">
+                <div className="h-9 w-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-200/50 shrink-0">
                   <Users className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-zinc-900 text-base">เลือกประวัติผู้ป่วย</h3>
+                  <h3 className="font-bold text-zinc-900 text-sm sm:text-base">เลือกประวัติผู้ป่วย</h3>
                   <p className="text-xs text-zinc-500">
                     พบทั้งหมด {totalFound} รายการ (แสดง {patientResults.length} รายการแรก)
                   </p>
@@ -774,29 +776,38 @@ function NewCaseFormContent() {
               </button>
             </div>
 
-            {totalFound > 30 && (
-              <div className="mx-6 mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200/80 flex items-start gap-2.5 text-xs text-amber-800">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold">พบข้อมูลมากเกินไป ({totalFound} รายการ):</span>{" "}
-                  แสดงผลเพียง 30 รายการแรก เพื่อความรวดเร็ว กรุณาระบุคำค้นหาให้แคบลง เช่น พิมพ์ชื่อและนามสกุลเต็ม หรือค้นหาด้วยเลขประจำตัวประชาชน
-                </div>
+            {/* คำแนะนำสำหรับมือถือ & แจ้งเตือนรายการเกิน */}
+            <div className="px-4 sm:px-6 pt-3 space-y-2">
+              {/* ข้อความบอกผู้ใช้มือถือว่าเลื่อนข้างได้ */}
+              <div className="sm:hidden flex items-center justify-between text-[11px] text-zinc-400 px-1">
+                <span>👈 เลื่อนซ้าย-ขวา เพื่อดูข้อมูลเพิ่มเติม 👉</span>
               </div>
-            )}
 
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="border border-zinc-200 rounded-xl overflow-hidden shadow-2xs">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-semibold">
+              {totalFound > 30 && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 flex items-start gap-2.5 text-xs text-amber-800">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold">พบข้อมูลมากเกินไป ({totalFound} รายการ):</span>{" "}
+                    แสดงผลเพียง 30 รายการแรก เพื่อความรวดเร็ว กรุณาระบุคำค้นหาให้แคบลง เช่น พิมพ์ชื่อและนามสกุลเต็ม หรือค้นหาด้วยเลขประจำตัวประชาชน
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ส่วนตาราง: รองรับเลื่อนแนวตั้ง (overflow-y-auto) และแนวนอน (overflow-x-auto) */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="border border-zinc-200 rounded-xl overflow-x-auto shadow-2xs">
+                <table className="w-full min-w-[760px] text-left text-xs border-collapse">
+                  <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-semibold sticky top-0 z-10">
                     <tr>
-                      <th className="py-3 px-3">HN</th>
-                      <th className="py-3 px-3">เลขประจำตัวประชาชน</th>
-                      <th className="py-3 px-3">ชื่อ - สกุล</th>
-                      <th className="py-3 px-3">อายุ</th>
-                      <th className="py-3 px-3">ถนน</th>
-                      <th className="py-3 px-3">ชุมชน / หมู่บ้าน</th>
-                      <th className="py-3 px-3">เบอร์โทรศัพท์</th>
-                      <th className="py-3 px-3 text-right">เลือก</th>
+                      <th className="py-3 px-3 w-28 whitespace-nowrap">HN</th>
+                      <th className="py-3 px-3 w-36 whitespace-nowrap">เลขประจำตัวประชาชน</th>
+                      <th className="py-3 px-3 min-w-[160px] whitespace-nowrap">ชื่อ - สกุล</th>
+                      <th className="py-3 px-3 w-16 whitespace-nowrap">อายุ</th>
+                      <th className="py-3 px-3 w-28 whitespace-nowrap">ถนน</th>
+                      <th className="py-3 px-3 min-w-[130px] whitespace-nowrap">ชุมชน / หมู่บ้าน</th>
+                      <th className="py-3 px-3 w-28 whitespace-nowrap">เบอร์โทรศัพท์</th>
+                      <th className="py-3 px-3 text-right w-20 whitespace-nowrap sticky right-0 bg-zinc-50">เลือก</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 text-zinc-800">
@@ -808,9 +819,13 @@ function NewCaseFormContent() {
                         }`}
                         onClick={() => applyPatientData(pt)}
                       >
-                        <td className="py-3 px-3 font-mono font-bold text-amber-700">{pt.hn}</td>
-                        <td className="py-3 px-3 font-mono text-zinc-600">{pt.cid || "-"}</td>
-                        <td className="py-3 px-3 font-medium text-zinc-900">
+                        <td className="py-3 px-3 font-mono font-bold text-amber-700 whitespace-nowrap">
+                          {pt.hn}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-zinc-600 whitespace-nowrap">
+                          {pt.cid || "-"}
+                        </td>
+                        <td className="py-3 px-3 font-medium text-zinc-900 whitespace-nowrap">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span>{pt.pname}{pt.fname} {pt.lname}</span>
                             {pt.is_deceased && (
@@ -820,11 +835,13 @@ function NewCaseFormContent() {
                             )}
                           </div>
                         </td>
-                        <td className="py-3 px-3 font-medium text-zinc-700">
+                        <td className="py-3 px-3 font-medium text-zinc-700 whitespace-nowrap">
                           {pt.age ? `${pt.age} ปี` : "-"}
                         </td>
-                        <td className="py-3 px-3 text-zinc-600">{pt.road || "-"}</td>
-                        <td className="py-3 px-3">
+                        <td className="py-3 px-3 text-zinc-600 whitespace-nowrap">
+                          {pt.road || "-"}
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
                           <span
                             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium border text-[11px] ${
                               pt.village_name === "บุคคลนอกเขต"
@@ -832,19 +849,21 @@ function NewCaseFormContent() {
                                 : "bg-sky-50 text-sky-700 border-sky-100"
                             }`}
                           >
-                            <Building2 className="w-3 h-3 text-sky-500" />
+                            <Building2 className="w-3 h-3 text-sky-500 shrink-0" />
                             {pt.village_name}
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-zinc-600">{pt.phone || "-"}</td>
-                        <td className="py-3 px-3 text-right">
+                        <td className="py-3 px-3 text-zinc-600 whitespace-nowrap">
+                          {pt.phone || "-"}
+                        </td>
+                        <td className="py-3 px-3 text-right whitespace-nowrap sticky right-0 bg-white/95 backdrop-blur-xs">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               applyPatientData(pt);
                             }}
-                            className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-amber-600 text-white text-xs font-semibold transition cursor-pointer"
+                            className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-amber-600 text-white text-xs font-semibold transition cursor-pointer shadow-2xs"
                           >
                             เลือก
                           </button>
@@ -856,15 +875,17 @@ function NewCaseFormContent() {
               </div>
             </div>
 
-            <div className="p-3.5 px-6 border-t border-zinc-100 flex justify-end bg-zinc-50/50">
+            {/* Modal Footer */}
+            <div className="p-3.5 px-5 sm:px-6 border-t border-zinc-100 flex justify-end bg-zinc-50/50">
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-zinc-200 text-zinc-600 hover:bg-zinc-100 text-xs font-semibold transition cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2 rounded-xl border border-zinc-200 text-zinc-600 hover:bg-zinc-100 text-xs font-semibold transition cursor-pointer"
               >
                 ปิดหน้าต่าง
               </button>
             </div>
+
           </div>
         </div>
       )}
