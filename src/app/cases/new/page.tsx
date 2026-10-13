@@ -369,7 +369,8 @@ function NewCaseFormContent() {
                   <div className="w-36 h-40 rounded-2xl border-2 border-dashed border-sky-200 bg-sky-50/30 overflow-hidden flex items-center justify-center shadow-xs relative group">
                     {formData.hn && !imageError ? (
                       <img
-                        src={`/uploads/patient/${formData.hn}.webp`}
+                        key={formData.hn} // เพิ่ม key เพื่อบังคับให้ re-mount element เมื่อ HN เปลี่ยน
+                        src={`/uploads/patient/${formData.hn}.webp?v=${formData.hn}`}
                         alt={`รูปผู้ป่วย HN ${formData.hn}`}
                         className={`w-full h-full object-cover transition duration-300 group-hover:scale-105 ${
                           formData.is_deceased ? "grayscale contrast-125" : ""

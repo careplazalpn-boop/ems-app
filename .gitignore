@@ -55,3 +55,10 @@ public/uploads/patient/*
 !public/uploads/patient/.gitkeep
 /src/generated/prisma
 
+# IDE / Editor settings
+.vscode/
+.idea/
+
+# Windows thumbnail cache
+Thumbs.db
+ehthumbs.db
