@@ -32,6 +32,8 @@ model patient {
   bloodgrp            String?   @db.VarChar(20)
   informname          String?   @db.VarChar(150)
   cid                 String    @db.VarChar(13)
+  sex                 String?   @db.Char(1)
+  pttype              String?   @db.Char(3)
   death               String?   @db.Char(1)
   mobile_phone_number String?   @db.VarChar(30)
   hometel             String?   @db.VarChar(30)
@@ -146,6 +148,7 @@ model ems_patients {
   pname           String?      @db.VarChar(30)
   fname           String       @db.VarChar(50)
   lname           String?      @db.VarChar(50)
+  gender          String?      @db.VarChar(10)
   pname_en        String?      @db.VarChar(30)                 // ชื่อภาษาอังกฤษ (ถ้ามี)
   fname_en        String?      @db.VarChar(50)
   lname_en        String?      @db.VarChar(50)
@@ -273,10 +276,17 @@ model nationality {
   inv_unuse   String? @db.Char(1)
 }
 
+enum VehicleStatus {
+  active
+  maintenance
+  inactive
+  reserve
+}
+
 model vehicles {
-  vehicle_id   Int     @id @default(autoincrement())
-  plate_number String  @db.VarChar(50)
-  vehicle_type String? @db.VarChar(50)
-  brand        String? @db.VarChar(50)
-  status       String? @default("active") @db.VarChar(30)
+  vehicle_id   Int            @id @default(autoincrement())
+  plate_number String         @db.VarChar(50)
+  vehicle_type String?        @db.VarChar(50)
+  brand        String?        @db.VarChar(50)
+  status       VehicleStatus? @default(active)
 }

@@ -129,8 +129,10 @@ async function formatHospitalPatient(pt: any) {
       .join(" ")
       .trim();
 
+  const patientSex = pt.sex ? String(pt.sex).trim() : "";
   const lat = cleanCoordinate(pt.home_latitude);
   const lng = cleanCoordinate(pt.home_longitude);
+  
 
   return {
     source: "HOSPITAL",
@@ -139,7 +141,7 @@ async function formatHospitalPatient(pt: any) {
     pname: pt.pname || "",
     fname: pt.fname || "",
     lname: pt.lname || "",
-    gender: pt.sex === "1" ? "male" : pt.sex === "2" ? "female" : "other",
+    gender: patientSex === "1" ? "1" : patientSex === "2" ? "2" : "other",
     age: calculatedAge ? String(calculatedAge) : "",
     birthday: pt.birthday ? pt.birthday.toISOString().split("T")[0] : "",
     blood_group: pt.bloodgrp?.trim() || pt.bloodgroup?.trim() || "",

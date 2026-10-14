@@ -39,8 +39,8 @@ const initialFormState = {
   pname: "นาย",
   fname: "",
   lname: "",
-  gender: "male",
-  age: "",
+  gender: "1", 
+  age: "",  
   blood_group: "",
   patient_phone: "",
   patient_address: "",
@@ -110,6 +110,14 @@ function NewCaseFormContent() {
       alert("⚠️ คำเตือน: ผู้ป่วยรายนี้มีประวัติระบุว่า 'เสียชีวิตแล้ว' ในระบบโรงพยาบาล");
     }
 
+    // แปลงค่าเพศให้เป็น "1" หรือ "2"
+  let formattedGender = "1";
+  const rawGender = String(pt.gender || pt.sex || "").trim();
+  if (rawGender === "1" || rawGender.toLowerCase() === "male") {
+    formattedGender = "1";
+  } else if (rawGender === "2" || rawGender.toLowerCase() === "female") {
+    formattedGender = "2";
+  }
     setFormData((prev) => ({
       ...prev,
       patient_source: pt.source,
@@ -119,8 +127,8 @@ function NewCaseFormContent() {
       passport_no: pt.passport_no || "",
       pname: pt.pname || prev.pname,
       fname: pt.fname || "",
-      lname: pt.lname || "",
-      gender: pt.gender || prev.gender,
+      lname: pt.lname || "",     
+      gender: formattedGender,
       age: pt.age ? String(pt.age) : prev.age,
       blood_group: pt.blood_group || prev.blood_group,
       patient_phone: pt.phone || prev.patient_phone,
@@ -505,13 +513,13 @@ function NewCaseFormContent() {
                     <div>
                       <label className="block text-xs font-semibold text-zinc-700 mb-1.5">เพศ</label>
                       <select
-                        value={formData.gender}
+                        value={formData.gender} // 💡 หากใน State ของคุณเปลี่ยนชื่อเป็น formData.sex ให้แก้ตรงนี้ด้วยครับ
                         onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                         className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:outline-none"
                       >
-                        <option value="male">ชาย</option>
-                        <option value="female">หญิง</option>
-                        <option value="other">อื่นๆ</option>
+                        <option value="">ไม่ระบุ</option>
+                        <option value="1">ชาย</option>
+                        <option value="2">หญิง</option>
                       </select>
                     </div>
                     <div>
@@ -608,6 +616,7 @@ function NewCaseFormContent() {
                     <option value="ACT">พ.ร.บ.คุ้มครองผู้ประสบภัยจากรถ</option>
                     <option value="FOREIGNER">ประกันสุขภาพต่างด้าว</option>
                     <option value="PAYMENT">ชำระเงินเอง</option>
+                    <option value="OTHER">อื่นๆ</option>
                   </select>
                 </div>
 
