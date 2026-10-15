@@ -152,7 +152,6 @@ model ems_patients {
   pname_en        String?      @db.VarChar(30)                 // ชื่อภาษาอังกฤษ (ถ้ามี)
   fname_en        String?      @db.VarChar(50)
   lname_en        String?      @db.VarChar(50)
-  gender          String?      @db.VarChar(10)                 // male, female, other
   age             Int?
   birthday        DateTime?    @db.Date
   phone           String?      @db.VarChar(30)
@@ -209,7 +208,7 @@ model ems_dispatches {
   id                    Int                   @id @default(autoincrement())
   case_id               Int
   vehicle_id            Int?   
-  team_members  String?   @db.Text
+  team_members          String?               @db.Text
   time_dispatched       DateTime?             @db.DateTime(0)
   time_departed         DateTime?             @db.DateTime(0)
   time_arrived_scene    DateTime?             @db.DateTime(0)
