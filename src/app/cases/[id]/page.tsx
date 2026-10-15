@@ -23,6 +23,8 @@ import {
   UserCheck,
   Car,
   Users,
+  Lock,
+  AlertCircle,
 } from "lucide-react";
 
 function CaseDetailContent() {
@@ -37,81 +39,109 @@ function CaseDetailContent() {
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [officers, setOfficers] = useState<any[]>([]);
 
-  // State ข้อมูลสั่งการเคส
-  const [status, setStatus] = useState("pending");
+  // State ข้อมูลสั่งการเคส (เงื่อนไขที่ 2: ค่าเริ่มต้นเป็น "dispatched" สั่งการรถแล้ว)
+  const [status, setStatus] = useState("dispatched");
   const [triageLevel, setTriageLevel] = useState("yellow");
   const [chiefComplaint, setChiefComplaint] = useState("");
   const [incidentAddress, setIncidentAddress] = useState("");
   const [callerName, setCallerName] = useState("");
   const [callerPhone, setCallerPhone] = useState("");
 
-  // State ข้อมูลรถและเจ้าหน้าที่ปฏิบัติการ
+  // State ข้อมูลรถและทีมปฏิบัติการ
   const [selectedVehicle, setSelectedVehicle] = useState("");
   const [leaderId, setLeaderId] = useState("");
   const [driverId, setDriverId] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
 
-  useEffect(() => {
-    if (!id) return;
+  // เงื่อนไขที่ 3: ดึงข้อมูลเดิมทั้งหมดกลับมาแสดงผล
+    useEffect(() => {
+      if (!id) return;
 
-    async function loadCaseData() {
-      try {
-        const res = await fetch(`/api/cases/${id}`);
-        const data = await res.json();
+      async function loadCaseData() {
+        try {
+          // เพิ่ม ?t=Date.now() และ cache: "no-store" เพื่อให้ดึงข้อมูลล่าสุดเสมอ ไม่ติด Browser Cache
+          const res = await fetch(`/api/cases/${id}?t=${Date.now()}`, {
+            cache: "no-store",
+          });
+          const data = await res.json();
 
-        if (res.ok && data.success) {
-          setCaseData(data.case);
-          setHospitalPt(data.hospital_patient);
-          setVehicles(data.vehicles || []);
-          setOfficers(data.officers || []);
+          if (res.ok && data.success) {
+            setCaseData(data.case);
+            setHospitalPt(data.hospital_patient);
+            setVehicles(data.vehicles || []);
+            setOfficers(data.officers || []);
 
-          setStatus(data.case.status || "pending");
-          setTriageLevel(data.case.triage_level || "yellow");
-          setChiefComplaint(data.case.chief_complaint || "");
-          setIncidentAddress(data.case.incident_address || "");
-          setCallerName(data.case.caller_name || "");
-          setCallerPhone(data.case.caller_phone || "");
+            // 1. ดึงข้อมูลสถานที่เกิดเหตุและอาการแจ้ง
+            setChiefComplaint(data.case.chief_complaint || "");
+            setIncidentAddress(data.case.incident_address || "");
+            setCallerName(data.case.caller_name || "");
+            setCallerPhone(data.case.caller_phone || "");
 
-          // โหลดข้อมูลการสั่งการล่าสุด (ถ้ามี)
-          if (data.latest_dispatch) {
-            setSelectedVehicle(String(data.latest_dispatch.vehicle_id || ""));
-            if (data.latest_dispatch.team_members) {
-              try {
-                const team = typeof data.latest_dispatch.team_members === "string"
-                  ? JSON.parse(data.latest_dispatch.team_members)
-                  : data.latest_dispatch.team_members;
+            // 2. ดึงข้อมูล Triage และ Status เดิม
+            if (data.case.triage_level) {
+              setTriageLevel(data.case.triage_level);
+            }
+            if (data.case.status) {
+              setStatus(data.case.status);
+            }
 
-                if (team.leader_id) setLeaderId(String(team.leader_id));
-                if (team.driver_id) setDriverId(String(team.driver_id));
-                if (Array.isArray(team.members)) setSelectedMembers(team.members);
-              } catch (e) {
-                console.error("Error parsing team_members:", e);
-              }
+            // 3. ดึงข้อมูลศูนย์สั่งการและส่งทีม (Dispatch Control) เดิม
+            if (data.latest_dispatch) {
+            if (data.latest_dispatch.vehicle_id) {
+              setSelectedVehicle(String(data.latest_dispatch.vehicle_id));
+            }
+
+            if (data.latest_dispatch.leader_id) {
+              setLeaderId(String(data.latest_dispatch.leader_id));
+            }
+
+            if (data.latest_dispatch.driver_id) {
+              setDriverId(String(data.latest_dispatch.driver_id));
+            }
+
+            if (Array.isArray(data.latest_dispatch.member_ids)) {
+              setSelectedMembers(data.latest_dispatch.member_ids);
             }
           }
-        } else {
-          alert(data.error || "เกิดข้อผิดพลาดในการดึงข้อมูลเคส");
+          } else {
+            alert(data.error || "เกิดข้อผิดพลาดในการดึงข้อมูลเคส");
+          }
+        } catch (err) {
+          console.error("Load Case Error:", err);
+          alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูลเคสได้");
+        } finally {
+          setLoading(false);
         }
-      } catch (err) {
-        alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูลเคสได้");
-      } finally {
-        setLoading(false);
       }
-    }
 
-    loadCaseData();
-  }, [id]);
+      loadCaseData();
+    }, [id]);
 
-  const toggleMember = (officerId: number) => {
-    setSelectedMembers((prev) =>
-      prev.includes(officerId)
-        ? prev.filter((id) => id !== officerId)
-        : [...prev, officerId]
+
+    const toggleMember = (officerId: number) => {
+      setSelectedMembers((prev) =>
+        prev.includes(officerId)
+          ? prev.filter((mid) => mid !== officerId)
+          : [...prev, officerId]
+      );
+    };
+
+    // ตรวจสอบความพร้อมของหัวหน้าชุดและคนขับ เพื่อเปิดให้เลือกผู้ร่วมปฏิบัติการ
+    const isLeadersAssigned = Boolean(leaderId && driverId);
+
+    // เงื่อนไขที่ 1: ตรวจสอบความครบถ้วนของข้อมูลก่อนอนุญาตให้คลิกบันทึก
+    const isFormValid = Boolean(
+      selectedVehicle && leaderId && driverId && status
     );
-  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!isFormValid) {
+      alert("กรุณาเลือกรถพยาบาล, หัวหน้าชุดปฏิบัติการ, พนักงานขับรถ และสถานะให้ครบถ้วนก่อนบันทึก");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -128,17 +158,21 @@ function CaseDetailContent() {
           vehicle_id: selectedVehicle || null,
           leader_id: leaderId || null,
           driver_id: driverId || null,
-          member_ids: selectedMembers,
+          member_ids: isLeadersAssigned ? selectedMembers : [],
         }),
       });
 
       const result = await res.json();
 
       if (res.ok) {
-        alert("บันทึกข้อมูลการสั่งการและทีมปฏิบัติการสำเร็จ");
-        router.refresh();
+        alert("บันทึกการสั่งการเรียบร้อย กำลังนำทางไปหน้าบันทึกรายละเอียดที่เกิดเหตุ...");
+        router.push(`/cases/${id}/treatment`);
       } else {
-        alert(result.error || "เกิดข้อผิดพลาดในการบันทึก");
+        // หากฝั่ง Server ส่ง Error มา จะแสดงข้อความเตือนที่กระชับ
+        const errMsg = typeof result.error === "string" 
+          ? result.error 
+          : "เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง";
+        alert(errMsg);
       }
     } catch (err) {
       alert("ไม่สามารถบันทึกข้อมูลได้");
@@ -384,21 +418,25 @@ function CaseDetailContent() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-5 pb-5 space-y-4">
-                {/* 1. เลือกรถพยาบาล (vehicles.plate_number) */}
+                {/* 1. เลือกรถพยาบาล (แสดงเฉพาะ ทะเบียนรถ และ ยี่ห้อ) */}
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 mb-1.5 flex items-center gap-1.5">
                     <Ambulance className="w-4 h-4 text-sky-600" />
-                    <span>เลือกรถพยาบาลออกเหตุ (ทะเบียนรถ)</span>
+                    <span>เลือกรถพยาบาลออกเหตุ <span className="text-rose-500">*</span></span>
                   </label>
                   <select
                     value={selectedVehicle}
                     onChange={(e) => setSelectedVehicle(e.target.value)}
-                    className="w-full h-11 px-3 rounded-xl border border-sky-300 bg-sky-50/30 text-xs sm:text-sm font-semibold text-zinc-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                    className={`w-full h-11 px-3 rounded-xl border text-xs sm:text-sm font-semibold text-zinc-900 focus:bg-white focus:outline-none transition ${
+                      !selectedVehicle
+                        ? "border-amber-300 bg-amber-50/30"
+                        : "border-sky-300 bg-sky-50/20"
+                    }`}
                   >
-                    <option value="">-- ยังไม่ระบุ / ไม่ได้ส่งรถ --</option>
+                    <option value="">-- กรุณาเลือกรถพยาบาล --</option>
                     {vehicles.map((v) => (
-                      <option key={v.vehicle_id} value={v.vehicle_id}>
-                        ทะเบียน {v.plate_number} {v.brand ? `(${v.brand})` : ""} {v.vehicle_type ? `[${v.vehicle_type}]` : ""}
+                      <option key={`veh-${v.vehicle_id}`} value={v.vehicle_id}>
+                        {v.plate_number} {v.brand ? `(${v.brand})` : ""}
                       </option>
                     ))}
                   </select>
@@ -408,12 +446,22 @@ function CaseDetailContent() {
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 mb-1.5 flex items-center gap-1.5">
                     <UserCheck className="w-4 h-4 text-emerald-600" />
-                    <span>หัวหน้าชุดปฏิบัติการ</span>
+                    <span>หัวหน้าชุดปฏิบัติการ <span className="text-rose-500">*</span></span>
                   </label>
                   <select
                     value={leaderId}
-                    onChange={(e) => setLeaderId(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl border border-zinc-200 bg-zinc-50/50 text-xs sm:text-sm text-zinc-800 focus:bg-white focus:outline-none"
+                    onChange={(e) => {
+                      const newLeader = e.target.value;
+                      setLeaderId(newLeader);
+                      if (newLeader) {
+                        setSelectedMembers((prev) => prev.filter((m) => String(m) !== newLeader));
+                      }
+                    }}
+                    className={`w-full h-10 px-3 rounded-xl border text-xs sm:text-sm text-zinc-800 focus:bg-white focus:outline-none transition ${
+                      !leaderId
+                        ? "border-amber-300 bg-amber-50/30"
+                        : "border-zinc-200 bg-zinc-50/50"
+                    }`}
                   >
                     <option value="">-- เลือกหัวหน้าชุด --</option>
                     {officers.map((u) => (
@@ -424,81 +472,93 @@ function CaseDetailContent() {
                   </select>
                 </div>
 
-                {/* 3. พนักงานขับรถ */}
+                {/* 3. พนักงานขับรถพยาบาล */}
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 mb-1.5 flex items-center gap-1.5">
                     <Car className="w-4 h-4 text-indigo-600" />
-                    <span>พนักงานขับรถพยาบาล</span>
+                    <span>พนักงานขับรถพยาบาล <span className="text-rose-500">*</span></span>
                   </label>
                   <select
                     value={driverId}
-                    onChange={(e) => setDriverId(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl border border-zinc-200 bg-zinc-50/50 text-xs sm:text-sm text-zinc-800 focus:bg-white focus:outline-none"
+                    onChange={(e) => {
+                      const newDriver = e.target.value;
+                      setDriverId(newDriver);
+                      if (newDriver) {
+                        setSelectedMembers((prev) => prev.filter((m) => String(m) !== newDriver));
+                      }
+                    }}
+                    className={`w-full h-10 px-3 rounded-xl border text-xs sm:text-sm text-zinc-800 focus:bg-white focus:outline-none transition ${
+                      !driverId
+                        ? "border-amber-300 bg-amber-50/30"
+                        : "border-zinc-200 bg-zinc-50/50"
+                    }`}
                   >
                     <option value="">-- เลือกคนขับรถ --</option>
                     {officers.map((u) => (
-                      <option key={`leader-${u.id}`} value={u.id}>
+                      <option key={`driver-${u.id}`} value={u.id}>
                         {u.name} ({u.role})
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* 4. ผู้ร่วมปฏิบัติการ (เลือกได้หลายคน) */}
+                {/* 4. ผู้ร่วมปฏิบัติการ (ปลดล็อคเมื่อเลือกหัวหน้าชุดและคนขับรถแล้วเท่านั้น) */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-semibold text-zinc-700 flex items-center gap-1.5">
                       <Users className="w-4 h-4 text-amber-600" />
                       <span>ผู้ร่วมปฏิบัติการ</span>
                     </label>
-                    <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
-                      เลือกแล้ว {selectedMembers.length} ท่าน
-                    </span>
-                  </div>
-
-                  <div className="max-h-40 overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50/50 p-2 space-y-1.5">
-                    {officers.length === 0 ? (
-                      <div className="text-center py-3 text-xs text-zinc-400">
-                        ไม่มีรายชื่อเจ้าหน้าที่
-                      </div>
+                    {isLeadersAssigned ? (
+                      <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
+                        เลือกแล้ว {selectedMembers.length} ท่าน
+                      </span>
                     ) : (
-                      officers.map((u) => {
-                        // กันไม่ให้ซ้ำกับคนที่เลือกเป็นหัวหน้าชุด หรือ คนขับรถ (ถ้าต้องการให้เลือกได้ทุกคน ให้เอาเงื่อนไข isSelectedElsewhere ออกได้ครับ)
-                        const isSelectedElsewhere =
-                          String(u.id) === String(leaderId) || String(u.id) === String(driverId);
-                        const isChecked = selectedMembers.includes(u.id);
-
-                        return (
-                          <label
-                            key={`member-${u.id}`}
-                            className={`flex items-center gap-2.5 p-2 rounded-lg cursor-pointer transition text-xs ${
-                              isChecked
-                                ? "bg-amber-100/70 border border-amber-300/80 text-zinc-900 font-semibold"
-                                : isSelectedElsewhere
-                                ? "opacity-40 cursor-not-allowed bg-zinc-100 text-zinc-400"
-                                : "hover:bg-white hover:shadow-2xs text-zinc-700 border border-transparent"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              disabled={isSelectedElsewhere}
-                              checked={isChecked}
-                              onChange={() => toggleMember(u.id)}
-                              className="h-4 w-4 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 cursor-pointer disabled:cursor-not-allowed"
-                            />
-                            <span className="flex-1 truncate">{u.name}</span>
-                            <span className="text-[10px] text-zinc-400 bg-white/80 px-1.5 py-0.5 rounded border border-zinc-200 shrink-0">
-                              {isSelectedElsewhere
-                                ? String(u.id) === String(leaderId)
-                                  ? "หัวหน้าชุด"
-                                  : "คนขับรถ"
-                                : u.role}
-                            </span>
-                          </label>
-                        );
-                      })
+                      <span className="text-[11px] font-medium text-zinc-400 flex items-center gap-1">
+                        <Lock className="w-3 h-3" />
+                        ระบุหัวหน้าและคนขับก่อน
+                      </span>
                     )}
                   </div>
+
+                  {!isLeadersAssigned ? (
+                    <div className="p-3.5 rounded-xl border border-dashed border-zinc-200 bg-zinc-50 text-center text-xs text-zinc-400">
+                      กรุณาเลือก <b>หัวหน้าชุดปฏิบัติการ</b> และ <b>คนขับรถ</b> ก่อน จึงจะสามารถเลือกผู้ร่วมปฏิบัติการได้
+                    </div>
+                  ) : (
+                    <div className="max-h-36 overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50/30 p-2 space-y-1.5 text-xs">
+                      {officers
+                        .filter(
+                          (u) =>
+                            String(u.id) !== String(leaderId) &&
+                            String(u.id) !== String(driverId)
+                        )
+                        .map((u) => {
+                          const isChecked = selectedMembers.includes(u.id);
+                          return (
+                            <label
+                              key={`member-${u.id}`}
+                              className={`flex items-center gap-2 p-1.5 rounded-lg cursor-pointer transition ${
+                                isChecked
+                                  ? "bg-amber-100/70 border border-amber-300 font-semibold text-zinc-900"
+                                  : "hover:bg-white hover:shadow-2xs text-zinc-700 border border-transparent"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleMember(u.id)}
+                                className="rounded border-zinc-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                              />
+                              <span className="flex-1 truncate">{u.name}</span>
+                              <span className="text-[10px] text-zinc-400 bg-white/80 px-1.5 py-0.5 rounded border border-zinc-200 shrink-0">
+                                {u.role}
+                              </span>
+                            </label>
+                          );
+                        })}
+                    </div>
+                  )}
                 </div>
 
                 {/* ระดับความรุนแรง Triage */}
@@ -524,10 +584,10 @@ function CaseDetailContent() {
                   </select>
                 </div>
 
-                {/* สถานะเคส (Workflow State) */}
+                {/* 5. สถานะเคส (เงื่อนไขที่ 2: ค่าเริ่มต้นคือ "dispatched" สั่งการรถแล้ว) */}
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 mb-1.5">
-                    สถานะการปฏิบัติการ (Status)
+                    สถานะการปฏิบัติการ (Status) <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={status}
@@ -542,15 +602,29 @@ function CaseDetailContent() {
                   </select>
                 </div>
 
-                {/* ปุ่มบันทึกการสั่งการ */}
+                {/* กล่องแจ้งเตือนเมื่อยังกรอกไม่ครบ */}
+                {!isFormValid && (
+                  <div className="flex items-start gap-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200/80 text-[11px] text-rose-700">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span>
+                      ต้องเลือกรถพยาบาล, หัวหน้าชุด, คนขับรถ และสถานะให้ครบก่อน จึงจะสามารถคลิกบันทึกได้
+                    </span>
+                  </div>
+                )}
+
+                {/* ปุ่มบันทึกการสั่งการ (เงื่อนไขที่ 1: Disable หากข้อมูลยังไม่ครบ) */}
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="w-full h-12 rounded-xl bg-gradient-to-r from-zinc-900 to-zinc-800 hover:from-zinc-800 hover:to-zinc-700 text-white text-sm font-semibold transition flex items-center justify-center gap-2 shadow-md disabled:opacity-50 cursor-pointer"
+                  disabled={!isFormValid || submitting}
+                  className={`w-full h-12 rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2 shadow-md ${
+                    isFormValid && !submitting
+                      ? "bg-gradient-to-r from-zinc-900 to-zinc-800 hover:from-zinc-800 hover:to-zinc-700 text-white cursor-pointer"
+                      : "bg-zinc-200 text-zinc-400 border border-zinc-300 cursor-not-allowed shadow-none"
+                  }`}
                 >
-                  <Save className="w-4 h-4 text-emerald-400" />
+                  <Save className={`w-4 h-4 ${isFormValid ? "text-emerald-400" : "text-zinc-400"}`} />
                   <span>
-                    {submitting ? "กำลังบันทึก..." : "บันทึกการสั่งการและทีม"}
+                    {submitting ? "กำลังบันทึก..." : "บันทึกและไปหน้ารายละเอียดที่เกิดเหตุ"}
                   </span>
                 </button>
               </CardContent>
@@ -559,10 +633,10 @@ function CaseDetailContent() {
             <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-500 space-y-1.5">
               <div className="flex items-center gap-1.5 font-semibold text-zinc-700">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>การลงทะเบียน Dispatch</span>
+                <span>ขั้นตอนการสั่งการ</span>
               </div>
               <p>
-                ข้อมูลรถ ทะเบียนรถ และรายชื่อเจ้าหน้าที่ทั้งหัวหน้าชุด คนขับ และผู้ร่วมทีม จะถูกจัดเก็บเป็นบันทึกการสั่งการร่วมกับเคสทันที
+                เลือกรถพยาบาล ระบุหัวหน้าชุดและคนขับรถ จากนั้นจึงเลือกผู้ร่วมปฏิบัติการ เมื่อบันทึกเสร็จสิ้นระบบจะนำท่านเข้าสู่หน้าบันทึกรายละเอียด ณ ที่เกิดเหตุทันที
               </p>
             </div>
           </div>

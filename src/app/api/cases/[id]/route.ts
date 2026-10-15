@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET: ดึงข้อมูลเคส + รถพยาบาล + เจ้าหน้าที่ EMS/Supervisor
+// GET: ดึงข้อมูลรายละเอียดเคส ผู้ป่วย รถพยาบาล เจ้าหน้าที่ และประวัติ Dispatch
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> | { id: string } }
@@ -14,15 +14,11 @@ export async function GET(
       return NextResponse.json({ error: "รหัสเคสไม่ถูกต้อง" }, { status: 400 });
     }
 
-    // 1. ดึงข้อมูลเคสพร้อมประวัติการส่งรถ (dispatches)
+    // 1. ดึงข้อมูลเคส
     const emsCase = await prisma.ems_cases.findUnique({
       where: { id: caseId },
       include: {
         ems_patient: true,
-        dispatches: {
-          orderBy: { id: "desc" },
-          take: 1,
-        },
       },
     });
 
@@ -30,7 +26,21 @@ export async function GET(
       return NextResponse.json({ error: "ไม่พบข้อมูลเคสที่ระบุ" }, { status: 404 });
     }
 
-    // 2. ดึงข้อมูลผู้ป่วย รพ. (ถ้ามี patient_hn)
+    // 2. ดึงข้อมูล Dispatch ล่าสุด พร้อมรายชื่อเจ้าหน้าที่
+    let latestDispatch: any = null;
+    try {
+      latestDispatch = await prisma.ems_dispatches.findFirst({
+        where: { case_id: caseId },
+        include: {
+          staffs: true,
+        },
+        orderBy: { id: "desc" },
+      });
+    } catch (dispErr) {
+      console.error("Error reading ems_dispatches:", dispErr);
+    }
+
+    // 3. ดึงข้อมูลผู้ป่วย รพ.
     let hospitalPatient: any = null;
     if (emsCase.patient_hn) {
       try {
@@ -49,30 +59,14 @@ export async function GET(
             calculatedAge = age >= 0 ? age : null;
           }
 
-          const phone =
-            (pt as any).mobile_phone_number?.trim() ||
-            (pt as any).hometel?.trim() ||
-            (pt as any).informtel?.trim() ||
-            "-";
-
-          const address =
-            (pt as any).address_full?.trim() ||
-            [
-              (pt as any).addrpart ? `บ้านเลขที่ ${(pt as any).addrpart}` : "",
-              (pt as any).moopart ? `หมู่ ${(pt as any).moopart}` : "",
-              (pt as any).road ? `ถ.${(pt as any).road}` : "",
-            ]
-              .filter(Boolean)
-              .join(" ") || "-";
-
           hospitalPatient = {
             hn: pt.hn,
             name: `${pt.pname || ""}${pt.fname || ""} ${pt.lname || ""}`.trim(),
             gender: pt.sex === "1" ? "ชาย" : pt.sex === "2" ? "หญิง" : "ไม่ระบุ",
             age: calculatedAge !== null ? `${calculatedAge} ปี` : "-",
             blood_group: (pt as any).bloodgrp?.trim() || (pt as any).bloodgroup?.trim() || "-",
-            phone: phone,
-            address: address,
+            phone: (pt as any).mobile_phone_number?.trim() || (pt as any).hometel?.trim() || "-",
+            address: (pt as any).address_full?.trim() || "-",
             is_deceased: pt.death === "Y" || pt.death === "1",
           };
         }
@@ -81,35 +75,28 @@ export async function GET(
       }
     }
 
-    // 3. ดึงรายการรถพยาบาลจากตาราง vehicles (แสดง plate_number)
+    // 4. ดึงรายการรถพยาบาล
     let availableVehicles: any[] = [];
     try {
-      const vList = await prisma.vehicles.findMany({
-        select: {
-          vehicle_id: true,
-          plate_number: true,
-          vehicle_type: true,
-          brand: true,
-          status: true,
-        },
-        orderBy: { vehicle_id: "asc" },
-      });
-
-      availableVehicles = vList.map((v) => ({
-        vehicle_id: v.vehicle_id,
-        plate_number: v.plate_number,
+      const rawVehicles: any[] = await prisma.$queryRaw`
+        SELECT vehicle_id, plate_number, vehicle_type, brand 
+        FROM vehicles 
+        ORDER BY vehicle_id ASC
+      `;
+      availableVehicles = rawVehicles.map((v) => ({
+        vehicle_id: Number(v.vehicle_id),
+        plate_number: v.plate_number || `รถรหัส ${v.vehicle_id}`,
         brand: v.brand || "",
         vehicle_type: v.vehicle_type || "",
-        status: String(v.status || "active"),
       }));
     } catch (vErr) {
-      console.error("Error reading vehicles:", vErr);
+      console.error("Error reading vehicles via queryRaw:", vErr);
     }
 
-    // 4. ดึงเจ้าหน้าที่จากตาราง users กรองเฉพาะ role = 'ems' หรือ 'Supervisor'
-   let emsOfficers: any[] = [];
+    // 5. ดึงเจ้าหน้าที่จากตาราง users
+    let emsOfficers: any[] = [];
     try {
-      const rawUsers = await prisma.users.findMany({
+      const uList = await prisma.users.findMany({
         where: {
           OR: [
             { role: "ems" },
@@ -118,7 +105,6 @@ export async function GET(
             { role: "EMS" },
           ],
         },
-        // ไม่ต้องระบุ select หรือถ้าใส่ select ให้ระบุ fullname ให้ชัดเจน
         select: {
           user_id: true,
           fullname: true,
@@ -129,21 +115,42 @@ export async function GET(
         orderBy: { fullname: "asc" },
       });
 
-      emsOfficers = rawUsers.map((u: any) => {
-        // ดึงค่า fullname เป็นหลัก หากไม่มีให้ลองดู u.name หรือ u.username
-        const displayName = u.fullname?.trim() || u.name?.trim() || u.username || `เจ้าหน้าที่ ID #${u.user_id}`;
-
-        return {
-          id: u.user_id,
-          name: displayName, // ส่งค่า displayName ไปเป็น name ให้หน้าบ้าน
-          role: u.role,
-          phone: u.phone || "-",
-        };
-      });
+      emsOfficers = uList.map((u: any) => ({
+        id: u.user_id,
+        name: u.fullname?.trim() || u.username || `เจ้าหน้าที่ ID #${u.user_id}`,
+        role: u.role,
+        phone: u.phone || "-",
+      }));
     } catch (uErr) {
       console.error("Error reading users:", uErr);
     }
-    // แปลง Decimal เป็นตัวเลข เพื่อไม่ให้ JSON Serialize พัง
+
+    // แปลงข้อมูล staffs (อ่านบทบาทจาก note หรือ role เผื่อไว้ทั้งสองแบบ)
+    let formattedDispatch = null;
+    if (latestDispatch) {
+      const leaderStaff = latestDispatch.staffs?.find(
+        (s: any) => s.note === "leader" || s.role === "leader"
+      );
+      const driverStaff = latestDispatch.staffs?.find(
+        (s: any) => s.note === "driver" || s.role === "driver"
+      );
+      const memberStaffs = latestDispatch.staffs?.filter(
+        (s: any) =>
+          s.note === "member" ||
+          s.role === "member" ||
+          (!s.note && !s.role) ||
+          (s.note !== "leader" && s.note !== "driver")
+      );
+
+      formattedDispatch = {
+        id: latestDispatch.id,
+        vehicle_id: latestDispatch.vehicle_id,
+        leader_id: leaderStaff ? leaderStaff.user_id : null,
+        driver_id: driverStaff ? driverStaff.user_id : null,
+        member_ids: memberStaffs ? memberStaffs.map((s: any) => s.user_id) : [],
+      };
+    }
+
     const safeCase = {
       ...emsCase,
       latitude: emsCase.latitude ? Number(emsCase.latitude) : null,
@@ -156,7 +163,7 @@ export async function GET(
       hospital_patient: hospitalPatient,
       vehicles: availableVehicles,
       officers: emsOfficers,
-      latest_dispatch: emsCase.dispatches?.[0] || null,
+      latest_dispatch: formattedDispatch,
     });
   } catch (error: any) {
     console.error("Error in GET /api/cases/[id]:", error);
@@ -167,7 +174,7 @@ export async function GET(
   }
 }
 
-// PATCH: บันทึกข้อมูลเคส + บันทึกการส่งรถและเจ้าหน้าที่
+// PATCH: บันทึกข้อมูลเคส + Dispatch + เจ้าหน้าที่ (ใช้ note แทน role)
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> | { id: string } }
@@ -187,63 +194,112 @@ export async function PATCH(
       vehicle_id,
       leader_id,
       driver_id,
-      member_ids, // array ของ id ผู้ร่วมปฏิบัติการ
+      member_ids,
     } = body;
 
-    // 1. อัปเดตข้อมูลตาราง ems_cases
-    const updatedCase = await prisma.ems_cases.update({
-      where: { id: caseId },
-      data: {
-        ...(status && { status }),
-        ...(triage_level && { triage_level }),
-        ...(chief_complaint && { chief_complaint }),
-        ...(incident_address && { incident_address }),
-        ...(caller_name && { caller_name }),
-        ...(caller_phone && { caller_phone }),
-        updated_at: new Date(),
-      },
-    });
+    const parsedVehicleId = vehicle_id ? parseInt(String(vehicle_id), 10) : null;
+    const parsedLeaderId = leader_id ? parseInt(String(leader_id), 10) : null;
+    const parsedDriverId = driver_id ? parseInt(String(driver_id), 10) : null;
+    const parsedMemberIds = Array.isArray(member_ids)
+      ? member_ids.map((m: any) => parseInt(String(m), 10)).filter(Boolean)
+      : [];
 
-    // 2. ถ้ามีการเลือกรถ หรือระบุเจ้าหน้าที่ ให้บันทึกลง ems_dispatches
-    if (vehicle_id || leader_id || driver_id || (member_ids && member_ids.length > 0)) {
-      try {
-        const teamMembersJson = JSON.stringify({
-          leader_id: leader_id ? parseInt(leader_id, 10) : null,
-          driver_id: driver_id ? parseInt(driver_id, 10) : null,
-          members: Array.isArray(member_ids) ? member_ids.map((m: any) => parseInt(m, 10)) : [],
-        });
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. อัปเดตข้อมูลในตาราง ems_cases
+      const updatedCase = await tx.ems_cases.update({
+        where: { id: caseId },
+        data: {
+          status: status || "dispatched",
+          triage_level: triage_level || "yellow",
+          chief_complaint: chief_complaint || null,
+          incident_address: incident_address || "",
+          caller_name: caller_name || null,
+          caller_phone: caller_phone || null,
+          updated_at: new Date(),
+        },
+      });
 
-        await prisma.ems_dispatches.create({
+      // 2. จัดการตาราง ems_dispatches
+      const existingDispatch = await tx.ems_dispatches.findFirst({
+        where: { case_id: caseId },
+        orderBy: { id: "desc" },
+      });
+
+      let dispatchId: number;
+
+      if (existingDispatch) {
+        dispatchId = existingDispatch.id;
+        await tx.ems_dispatches.update({
+          where: { id: dispatchId },
           data: {
-            case_id: caseId,
-            vehicle_id: vehicle_id ? parseInt(vehicle_id, 10) : null,
-            team_members: teamMembersJson,
-            dispatched_at: new Date(),
-            status: "dispatched",
+            vehicle_id: parsedVehicleId,
           },
         });
 
-        // หากสถานะเคสยังเป็น pending ให้ปรับเป็น dispatched อัตโนมัติ
-        if (updatedCase.status === "pending" && vehicle_id) {
-          await prisma.ems_cases.update({
-            where: { id: caseId },
-            data: { status: "dispatched" },
+        // ล้างข้อมูล staffs เดิมของ dispatch นี้
+        await tx.ems_dispatch_staffs.deleteMany({
+          where: { dispatch_id: dispatchId },
+        });
+      } else {
+        const newDispatch = await tx.ems_dispatches.create({
+          data: {
+            case_id: caseId,
+            vehicle_id: parsedVehicleId,
+            time_dispatched: new Date(),
+          },
+        });
+        dispatchId = newDispatch.id;
+      }
+
+      // 3. เตรียมข้อมูลทีมเจ้าหน้าที่ โดยบันทึกบทบาทลงคอลัมน์ note
+      const staffData: { dispatch_id: number; user_id: number; note: string }[] = [];
+
+      if (parsedLeaderId) {
+        staffData.push({
+          dispatch_id: dispatchId,
+          user_id: parsedLeaderId,
+          note: "leader",
+        });
+      }
+
+      if (parsedDriverId) {
+        staffData.push({
+          dispatch_id: dispatchId,
+          user_id: parsedDriverId,
+          note: "driver",
+        });
+      }
+
+      parsedMemberIds.forEach((uid: number) => {
+        if (uid !== parsedLeaderId && uid !== parsedDriverId) {
+          staffData.push({
+            dispatch_id: dispatchId,
+            user_id: uid,
+            note: "member",
           });
         }
-      } catch (dispErr) {
-        console.error("Error creating dispatch record:", dispErr);
+      });
+
+      // 4. บันทึกลง ems_dispatch_staffs
+      if (staffData.length > 0) {
+        await tx.ems_dispatch_staffs.createMany({
+          data: staffData,
+        });
       }
-    }
+
+      return { updatedCase, dispatchId };
+    });
 
     return NextResponse.json({
       success: true,
-      message: "บันทึกการสั่งการและทีมปฏิบัติการเรียบร้อยแล้ว",
-      case: updatedCase,
+      message: "บันทึกข้อมูลการสั่งการและทีมปฏิบัติการเรียบร้อยแล้ว",
+      case: result.updatedCase,
+      dispatch_id: result.dispatchId,
     });
   } catch (error: any) {
-    console.error("Error in PATCH /api/cases/[id]:", error);
+    console.error("CRITICAL ERROR in PATCH /api/cases/[id]:", error);
     return NextResponse.json(
-      { error: error?.message || "เกิดข้อผิดพลาดในการอัปเดตข้อมูล" },
+      { error: error?.message || "เกิดข้อผิดพลาดในการอัปเดตข้อมูลเคส" },
       { status: 500 }
     );
   }

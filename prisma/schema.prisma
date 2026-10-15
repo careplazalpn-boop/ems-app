@@ -208,7 +208,8 @@ model ems_cases {
 model ems_dispatches {
   id                    Int                   @id @default(autoincrement())
   case_id               Int
-  vehicle_id            Int?                  // อ้างอิง vehicles.vehicle_id เดิม
+  vehicle_id            Int?   
+  team_members  String?   @db.Text
   time_dispatched       DateTime?             @db.DateTime(0)
   time_departed         DateTime?             @db.DateTime(0)
   time_arrived_scene    DateTime?             @db.DateTime(0)
