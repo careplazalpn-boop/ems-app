@@ -79,6 +79,8 @@ model users {
   created_at DateTime? @db.DateTime(0)
   avatars    String?   @db.VarChar(200)
   img        Bytes     @db.MediumBlob
+  treatments_recorded ems_treatments[]
+  attachments_uploaded ems_case_attachments[]
 }
 
 model users_image {
@@ -197,6 +199,7 @@ model ems_cases {
   dispatches          ems_dispatches[]
   treatments          ems_treatments[]
   images              ems_case_images[]
+  attachments         ems_case_attachments[]
 
   @@index([patient_hn], map: "idx_ems_case_hn")
   @@index([ems_patient_id], map: "idx_ems_case_temp_pt")
@@ -237,20 +240,73 @@ model ems_dispatch_staffs {
 
 // 5. บันทึกสัญญาณชีพและการรักษาเบื้องต้น
 model ems_treatments {
-  id               Int       @id @default(autoincrement())
-  case_id          Int
-  recorded_at      DateTime  @default(now()) @db.DateTime(0)
-  bp_systolic      Int?
-  bp_diastolic     Int?
-  pulse_rate       Int?
-  respiratory_rate Int?
-  spo2             Int?
-  interventions    String?   @db.Text
+  id                        Int       @id @default(autoincrement())
+  case_id                   Int       @unique
+  patient_type              String    @default("non_trauma") @db.VarChar(20) // trauma, non_trauma
+  
+  // Vital signs & Neuro signs
+  sbp                       Int?
+  dbp                       Int?
+  pulse_rate                Int?
+  respiratory_rate          Int?
+  spo2                      Int?
+  temperature               Decimal?  @db.Decimal(4, 1)
+  dtx                       Int?
+  gcs_e                     Int?
+  gcs_v                     Int?
+  gcs_m                     Int?
+  consciousness             String?   @db.VarChar(50)
+  pupil_right               String?   @db.VarChar(20)
+  pupil_left                String?   @db.VarChar(20)
+  
+  // Assessment
+  breathing_type            String?   @db.VarChar(50)
+  wound_types               String?   @db.Text
+  deformity                 String    @default("none") @db.VarChar(20)
+  injured_organs            String?   @db.Text
+  
+  // Interventions
+  airway_management         String?   @db.VarChar(50)
+  wound_management          String?   @db.VarChar(50)
+  splint_management         String?   @db.VarChar(100)
+  cpr_performed             Int       @default(0) @db.TinyInt
+  initial_outcome           String?   @db.VarChar(100)
+  
+  // Hospital Destination
+  destination_hospital      String?   @db.VarChar(100)
+  hospital_decision_reasons String?   @db.Text
+  treatment_notes           String?   @db.Text
 
-  ems_case         ems_cases @relation(fields: [case_id], references: [id], onDelete: Cascade)
+  // User ผู้บันทึก & วันเวลา
+  recorded_by               Int?
+  created_at                DateTime  @default(now()) @db.DateTime(0)
+  updated_at                DateTime  @default(now()) @updatedAt @db.DateTime(0)
 
-  @@index([case_id], map: "idx_treatment_case_id")
+  // Relations เชื่อมโยงเคสหลักและตารางผู้ใช้งาน
+  ems_case                  ems_cases @relation(fields: [case_id], references: [id], onDelete: Cascade)
+  recorder                  users?    @relation(fields: [recorded_by], references: [user_id])
 }
+
+model ems_case_attachments {
+  id          Int       @id @default(autoincrement())
+  case_id     Int
+  category    String    @default("scene") @db.VarChar(30)
+  file_name   String    @db.VarChar(255)
+  file_path   String    @db.VarChar(255)
+  file_size   Int?
+  caption     String?   @db.VarChar(255)
+
+  // User ผู้อัปโหลดรูป & วันเวลา
+  uploaded_by Int?
+  created_at  DateTime  @default(now()) @db.DateTime(0)
+
+  // Relations เชื่อมโยงเคสหลักและตารางผู้ใช้งาน
+  ems_case    ems_cases @relation(fields: [case_id], references: [id], onDelete: Cascade)
+  uploader    users?    @relation(fields: [uploaded_by], references: [user_id])
+
+  @@index([case_id])
+}
+
 
 // 6. รูปภาพขณะปฏิบัติงาน
 model ems_case_images {
