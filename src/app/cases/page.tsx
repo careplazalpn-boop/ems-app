@@ -8,20 +8,19 @@ import {
   Siren,
   Plus,
   Search,
-  Filter,
   RefreshCw,
   Clock,
   MapPin,
-  Phone,
-  User,
   AlertTriangle,
   CheckCircle2,
   Ambulance,
   ChevronRight,
-  ExternalLink,
   ChevronLeft,
   Skull,
   Radio,
+  User,
+  Building2,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function CasesPage() {
@@ -365,7 +364,7 @@ export default function CasesPage() {
           </CardContent>
         </Card>
 
-        {/* 3. รายการเคส (รองรับทั้ง Card และ Table Responsive) */}
+        {/* 3. รายการเคส */}
         {loading ? (
           <div className="py-20 text-center space-y-3">
             <RefreshCw className="w-8 h-8 text-rose-500 animate-spin mx-auto stroke-1" />
@@ -388,95 +387,130 @@ export default function CasesPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {cases.map((item) => (
-              <div
-                key={item.id}
-                className="bg-white rounded-2xl border border-zinc-200/80 p-4 sm:p-5 hover:border-zinc-300 hover:shadow-xs transition flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
-              >
-                {/* ข้อมูลเคสหลัก */}
-                <div className="space-y-2 flex-1 min-w-0">
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-mono text-sm font-bold text-zinc-900 bg-zinc-100 px-2.5 py-1 rounded-lg border border-zinc-200/80">
-                      {item.case_number}
-                    </span>
-                    {renderTriageBadge(item.triage_level)}
-                    {renderStatusBadge(item.status)}
-                    <span className="text-xs text-zinc-400 flex items-center gap-1 ml-auto md:ml-0">
-                      <Clock className="w-3.5 h-3.5" />
-                      {formatThaiDateTime(item.created_at)}
-                    </span>
+            {cases.map((item) => {
+              const ptHn = item.patient_hn;
+              const hospitalPt = item.hospital_patient;
+              const ptName = hospitalPt
+                ? hospitalPt.name
+                : item.ems_patient
+                ? `${item.ems_patient.pname || ""}${item.ems_patient.fname || ""} ${item.ems_patient.lname || ""}`.trim()
+                : "ไม่ระบุชื่อ / นิรนาม";
+
+              return (
+                <div
+                  key={item.id}
+                  className="bg-white rounded-2xl border border-zinc-200/80 p-4 sm:p-5 hover:border-zinc-300 hover:shadow-xs transition flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4"
+                >
+                  {/* ข้อมูลรูปภาพผู้ป่วย & ข้อมูลเคสหลัก */}
+                  <div className="flex items-start gap-4 flex-1 min-w-0">
+                    {/* 1. รูปภาพผู้ป่วย (Patient Image) */}
+                    <div className="w-14 h-16 rounded-xl border border-dashed border-sky-200 bg-sky-50/30 overflow-hidden flex items-center justify-center shrink-0 relative">
+                      {ptHn && ptHn !== "-" ? (
+                        <img
+                          src={`/uploads/patient/${ptHn}.webp?v=${ptHn}`}
+                          alt="Patient"
+                          className={`w-full h-full object-cover ${
+                            hospitalPt?.is_deceased ? "grayscale" : ""
+                          }`}
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <User className="w-6 h-6 text-sky-300 stroke-1" />
+                      )}
+                      {hospitalPt?.is_deceased && (
+                        <div className="absolute inset-x-0 bottom-0 bg-red-600/90 text-white text-[8px] font-bold text-center py-0.5">
+                          เสียชีวิต
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-sm font-bold text-zinc-900 bg-zinc-100 px-2.5 py-0.5 rounded-lg border border-zinc-200/80">
+                          {item.case_number}
+                        </span>
+                        {renderTriageBadge(item.triage_level)}
+                        {renderStatusBadge(item.status)}
+                        <span className="text-xs text-zinc-400 flex items-center gap-1 ml-auto">
+                          <Clock className="w-3.5 h-3.5" />
+                          {formatThaiDateTime(item.created_at)}
+                        </span>
+                      </div>
+
+                      <div className="text-xs font-bold text-zinc-800 flex items-center gap-1.5 truncate">
+                        <User className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                        <span className="truncate">ผู้ป่วย: {ptName}</span>
+                        <span className="text-zinc-400 font-normal font-mono">(HN: {ptHn || "-"})</span>
+                      </div>
+
+                      <p className="text-xs text-zinc-500 truncate flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        <span className="truncate">{item.incident_address || "ไม่ระบุสถานที่เกิดเหตุ"}</span>
+                      </p>
+                    </div>
                   </div>
 
-                  {/* ข้อมูลผู้ป่วยและอาการ */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
-                    <div className="flex items-center gap-2 text-zinc-800">
-                      <User className="w-4 h-4 text-sky-600 shrink-0" />
-                      <span className="font-semibold text-zinc-900">
-                        {item.patient.name}
-                      </span>
-                      <span className="text-zinc-500">
-                        ({item.patient.gender}, {item.patient.age})
-                      </span>
-                      {item.patient.hn !== "-" && (
-                        <span className="font-mono text-[11px] text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
-                          HN: {item.patient.hn}
+                  {/* ข้อมูลสรุป: สถานะสุดท้าย, รพ.ส่งต่อ, หัวหน้าชุด */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4 w-full lg:w-auto border-t lg:border-t-0 pt-3 lg:pt-0 border-zinc-100">
+                    {/* ข้อ 1 & 2: สถานะสุดท้าย / รพ. ปลายทาง */}
+                    <div className="text-xs space-y-1">
+                      <div className="flex items-center gap-1">
+                        <span className="text-zinc-400">สถานะ/ผลลัพธ์:</span>
+                        <span className="font-semibold text-zinc-800">
+                          {hospitalPt?.is_deceased ? (
+                            <span className="text-rose-600 font-bold flex items-center gap-1">
+                              <Skull className="w-3.5 h-3.5" /> เสียชีวิต
+                            </span>
+                          ) : (
+                            item.latest_treatment?.initial_outcome || "กำลังดำเนินการ"
+                          )}
                         </span>
-                      )}
-                      {item.patient.is_deceased && (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
-                          <Skull className="w-2.5 h-2.5" /> เสียชีวิต
+                      </div>
+                      <div className="flex items-center gap-1 text-sky-700 font-medium">
+                        <Building2 className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                        <span className="truncate">
+                          ส่ง รพ.: {item.latest_treatment?.destination_hospital || "-"}
                         </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 text-zinc-600 truncate">
-                      <Phone className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                      <span>
-                        ผู้แจ้ง: <span className="font-medium">{item.caller_name}</span> ({item.caller_phone})
-                      </span>
-                    </div>
-
-                    <div className="sm:col-span-2 flex items-start gap-2 text-zinc-600">
-                      <MapPin className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                      <span className="line-clamp-1">{item.incident_address}</span>
-                      {item.latitude && item.longitude && (
-                        <a
-                          href={`https://www.google.com/maps?q=${item.latitude},${item.longitude}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-emerald-600 hover:text-emerald-700 font-semibold inline-flex items-center gap-0.5 shrink-0 ml-1"
-                        >
-                          <span>แผนที่</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                    </div>
-
-                    <div className="sm:col-span-2 flex items-start gap-2 text-zinc-700 bg-zinc-50 p-2.5 rounded-xl border border-zinc-100">
-                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-semibold text-zinc-800">อาการสำคัญ: </span>
-                        <span>{item.chief_complaint}</span>
                       </div>
                     </div>
+
+                    {/* ข้อ 3: หัวหน้าชุดปฏิบัติการ */}
+                    <div className="text-xs space-y-1">
+                      <div className="flex items-center gap-1 text-zinc-400">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>หัวหน้าชุด:</span>
+                      </div>
+                      <p className="font-semibold text-zinc-800 truncate">
+                        {item.latest_dispatch?.leader?.name || "ยังไม่ระบุหัวหน้าชุด"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* ข้อ 4 & 5: ปุ่มดูสรุปเคส และปุ่ม สั่งการ / ดำเนินการ */}
+                  <div className="flex items-center justify-end gap-2 w-full lg:w-auto pt-2 lg:pt-0 border-t lg:border-t-0 border-zinc-100">
+                    <Link
+                      href={`/cases/${item.id}/summary`}
+                      className="px-3 py-2 rounded-xl border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-semibold transition text-center"
+                    >
+                      ดูสรุปเคส
+                    </Link>
+
+                    <Link
+                      href={`/cases/${item.id}`}
+                      className="flex-1 lg:flex-none px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-2xs"
+                    >
+                      <span>สั่งการ / ดำเนินการ</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </Link>
                   </div>
                 </div>
-
-                {/* ปุ่มจัดการเคส */}
-                <div className="flex items-center gap-2 w-full md:w-auto justify-end border-t md:border-t-0 pt-3 md:pt-0 border-zinc-100">
-                  <Link
-                    href={`/cases/${item.id}`}
-                    className="h-9 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-2xs"
-                  >
-                    <span>สั่งการ / รายละเอียด</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {/* ระบบแบ่งหน้า (Pagination) */}
-            <div className="flex items-center justify-between pt-4 px-2 text-xs text-zinc-500">
+            <div className="flex flex-col sm:flex-row items-center justify-between pt-4 px-2 text-xs text-zinc-500 gap-2">
               <div>
                 แสดงทั้งหมด <span className="font-bold text-zinc-900">{totalCases}</span> เคส (หน้า {page} จาก {totalPages})
               </div>

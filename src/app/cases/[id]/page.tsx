@@ -25,6 +25,7 @@ import {
   Users,
   Lock,
   AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 
 function CaseDetailContent() {
@@ -53,69 +54,68 @@ function CaseDetailContent() {
   const [driverId, setDriverId] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
 
+  // State ควบคุม Modern Success Modal
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
   // เงื่อนไขที่ 3: ดึงข้อมูลเดิมทั้งหมดกลับมาแสดงผล
     useEffect(() => {
-      if (!id) return;
+  if (!id) return;
 
-      async function loadCaseData() {
-        try {
-          // เพิ่ม ?t=Date.now() และ cache: "no-store" เพื่อให้ดึงข้อมูลล่าสุดเสมอ ไม่ติด Browser Cache
-          const res = await fetch(`/api/cases/${id}?t=${Date.now()}`, {
-            cache: "no-store",
-          });
-          const data = await res.json();
+  // 🌟 ป้องกัน Modal ค้างจาก Cache เมื่อกดกลับมาหน้าเดิม
+  setShowSuccessModal(false);
 
-          if (res.ok && data.success) {
-            setCaseData(data.case);
-            setHospitalPt(data.hospital_patient);
-            setVehicles(data.vehicles || []);
-            setOfficers(data.officers || []);
+  async function loadCaseData() {
+    try {
+      const res = await fetch(`/api/cases/${id}?t=${Date.now()}`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
 
-            // 1. ดึงข้อมูลสถานที่เกิดเหตุและอาการแจ้ง
-            setChiefComplaint(data.case.chief_complaint || "");
-            setIncidentAddress(data.case.incident_address || "");
-            setCallerName(data.case.caller_name || "");
-            setCallerPhone(data.case.caller_phone || "");
+      if (res.ok && data.success) {
+        setCaseData(data.case);
+        setHospitalPt(data.hospital_patient);
+        setVehicles(data.vehicles || []);
+        setOfficers(data.officers || []);
 
-            // 2. ดึงข้อมูล Triage และ Status เดิม
-            if (data.case.triage_level) {
-              setTriageLevel(data.case.triage_level);
-            }
-            if (data.case.status) {
-              setStatus(data.case.status);
-            }
+        // เซ็ตค่าฟอร์มต่างๆ ตามปกติ...
+        setChiefComplaint(data.case.chief_complaint || "");
+        setIncidentAddress(data.case.incident_address || "");
+        setCallerName(data.case.caller_name || "");
+        setCallerPhone(data.case.caller_phone || "");
 
-            // 3. ดึงข้อมูลศูนย์สั่งการและส่งทีม (Dispatch Control) เดิม
-            if (data.latest_dispatch) {
-            if (data.latest_dispatch.vehicle_id) {
-              setSelectedVehicle(String(data.latest_dispatch.vehicle_id));
-            }
-
-            if (data.latest_dispatch.leader_id) {
-              setLeaderId(String(data.latest_dispatch.leader_id));
-            }
-
-            if (data.latest_dispatch.driver_id) {
-              setDriverId(String(data.latest_dispatch.driver_id));
-            }
-
-            if (Array.isArray(data.latest_dispatch.member_ids)) {
-              setSelectedMembers(data.latest_dispatch.member_ids);
-            }
-          }
-          } else {
-            alert(data.error || "เกิดข้อผิดพลาดในการดึงข้อมูลเคส");
-          }
-        } catch (err) {
-          console.error("Load Case Error:", err);
-          alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูลเคสได้");
-        } finally {
-          setLoading(false);
+        if (data.case.triage_level) {
+          setTriageLevel(data.case.triage_level);
         }
-      }
+        if (data.case.status) {
+          setStatus(data.case.status);
+        }
 
-      loadCaseData();
-    }, [id]);
+        if (data.latest_dispatch) {
+          if (data.latest_dispatch.vehicle_id) {
+            setSelectedVehicle(String(data.latest_dispatch.vehicle_id));
+          }
+          if (data.latest_dispatch.leader_id) {
+            setLeaderId(String(data.latest_dispatch.leader_id));
+          }
+          if (data.latest_dispatch.driver_id) {
+            setDriverId(String(data.latest_dispatch.driver_id));
+          }
+          if (Array.isArray(data.latest_dispatch.member_ids)) {
+            setSelectedMembers(data.latest_dispatch.member_ids);
+          }
+        }
+      } else {
+        alert(data.error || "เกิดข้อผิดพลาดในการดึงข้อมูลเคส");
+      }
+    } catch (err) {
+      console.error("Load Case Error:", err);
+      alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูลเคสได้");
+    } finally {
+      setLoading(false);
+    }
+  }
+    loadCaseData();
+  }, [id]);
 
 
     const toggleMember = (officerId: number) => {
@@ -165,10 +165,9 @@ function CaseDetailContent() {
       const result = await res.json();
 
       if (res.ok) {
-        alert("บันทึกการสั่งการเรียบร้อย กำลังนำทางไปหน้าบันทึกรายละเอียดที่เกิดเหตุ...");
-        router.push(`/cases/${id}/treatment`);
+        // 🌟 เปิด Modal แจ้งเตือนความสำเร็จเฉพาะตอนกดปุ่มบันทึกผ่านแล้วเท่านั้น
+        setShowSuccessModal(true);
       } else {
-        // หากฝั่ง Server ส่ง Error มา จะแสดงข้อความเตือนที่กระชับ
         const errMsg = typeof result.error === "string" 
           ? result.error 
           : "เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง";
@@ -642,6 +641,36 @@ function CaseDetailContent() {
           </div>
         </form>
       </div>
+
+      {/* 🌟 Modern Success Modal สำหรับหน้าสั่งการเคสหลัก */}      
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-zinc-100 text-center space-y-5">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-zinc-900">
+                บันทึกการสั่งการสำเร็จ
+              </h3>
+              <p className="text-xs text-zinc-500">
+                ข้อมูลรถพยาบาลและทีมปฏิบัติการถูกบันทึกเรียบร้อยแล้ว ระบบจะพาคุณไปบันทึกรายละเอียดการรักษาต่อ
+              </p>
+            </div>
+
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => router.push(`/cases/${id}/treatment`)}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 text-white text-xs font-bold shadow-md transition cursor-pointer"
+              >
+                ตกลง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

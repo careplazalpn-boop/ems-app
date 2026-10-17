@@ -9,7 +9,6 @@ import {
   Activity,
   Heart,
   Wind,
-  Thermometer,
   Eye,
   AlertCircle,
   ShieldCheck,
@@ -95,15 +94,15 @@ function TreatmentContent() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [caseData, setCaseData] = useState<any>(null);
-  const [dispatchInfo, setDispatchInfo] = useState<any>(null);
 
   // ข้อมูลพิกัดสถานที่เกิดเหตุ
   const [incidentAddress, setIncidentAddress] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [gettingLocation, setGettingLocation] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
 
-const [openSections, setOpenSections] = useState({
+  const [openSections, setOpenSections] = useState({
     secLocation: true,
     sec1: true,
     sec2: true,
@@ -170,8 +169,8 @@ const [openSections, setOpenSections] = useState({
   const [treatmentNotes, setTreatmentNotes] = useState("");
   const [caseStatus, setCaseStatus] = useState("completed");
 
-  // สถานะสำหรับโหลดตอนบันทึกพิกัดด่วน
-  const [savingLocation, setSavingLocation] = useState(false);
+  // 🌟 ป้องกัน Modal ค้าง: กำหนดค่าเริ่มต้นเป็น false เสมอ
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // ฟังก์ชันดึงพิกัดปัจจุบันผ่าน Browser GPS
   const handleGetCurrentLocation = () => {
@@ -197,7 +196,7 @@ const [openSections, setOpenSections] = useState({
     );
   };
 
-const handleQuickSaveLocation = async () => {
+  const handleQuickSaveLocation = async () => {
     if (!latitude || !longitude) {
       alert("กรุณาดึงพิกัด GPS ก่อนทำการบันทึก");
       return;
@@ -217,7 +216,7 @@ const handleQuickSaveLocation = async () => {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        alert("บันทึกพิกัดและสถานที่เกิดเหตุลงฐานข้อมูลเรียบร้อยแล้ว! (สถานะเปลี่ยนเป็นถึงที่เกิดเหตุ)");
+        alert("บันทึกพิกัดและสถานที่เกิดเหตุลงฐานข้อมูลเรียบร้อยแล้ว!");
       } else {
         alert(data.error || "ไม่สามารถบันทึกพิกัดได้");
       }
@@ -287,6 +286,9 @@ const handleQuickSaveLocation = async () => {
   useEffect(() => {
     if (!id) return;
 
+    // 🌟 1. ล้างค่า Modal ทันทีที่เปิดหน้านี้หรือกดปุ่มย้อนกลับมา ป้องกัน Modal เด้งค้าง
+    setShowSuccessModal(false);
+
     async function loadData() {
       try {
         const res = await fetch(`/api/cases/${id}/treatment?t=${Date.now()}`, {
@@ -296,7 +298,6 @@ const handleQuickSaveLocation = async () => {
 
         if (res.ok && data.success) {
           setCaseData(data.case);
-          setDispatchInfo(data.dispatch);
           setIncidentAddress(data.case.incident_address || "");
           setLatitude(data.case.latitude ? String(data.case.latitude) : "");
           setLongitude(data.case.longitude ? String(data.case.longitude) : "");
@@ -421,9 +422,8 @@ const handleQuickSaveLocation = async () => {
 
       const data = await res.json();
       if (res.ok) {
-        alert("บันทึกข้อมูลการรักษาสำเร็จ! กำลังไปหน้าเพิ่มรูปการปฏิบัติงาน...");
-        // 💡 เมื่อบันทึกเสร็จ ไปหน้าเพิ่มรูปการปฏิบัติงานในเคสนี้
-        router.push(`/cases/${id}/attachments`);
+        // 🌟 2. เปิด Modal สำเร็จเฉพาะเมื่อกดบันทึกสำเร็จจริง ๆ เท่านั้น
+        setShowSuccessModal(true);
       } else {
         alert(data.error || "เกิดข้อผิดพลาดในการบันทึก");
       }
@@ -462,7 +462,7 @@ const handleQuickSaveLocation = async () => {
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-lg sm:text-xl font-bold font-mono text-zinc-900">
                   {caseData?.case_number}
                 </span>
@@ -476,8 +476,14 @@ const handleQuickSaveLocation = async () => {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-zinc-500 mt-0.5">
-                ผู้ป่วย: {caseData?.ems_patient?.fname} {caseData?.ems_patient?.lname} (HN: {caseData?.patient_hn || "-"})
+              
+              {/* 🌟 แสดง HN และชื่อ-นามสกุลผู้ป่วยต่อกันอย่างชัดเจน */}
+              <p className="text-xs text-zinc-600 mt-1 flex items-center gap-1.5 font-medium">
+                <span className="text-zinc-400 font-mono">HN: {caseData?.patient_hn || "-"}</span>
+                <span className="text-zinc-300">|</span>
+                <span className="text-zinc-800 font-bold">
+                  ผู้ป่วย: {caseData?.hospital_patient?.name || (caseData?.ems_patient ? `${caseData.ems_patient.pname || ""}${caseData.ems_patient.fname || ""} ${caseData.ems_patient.lname || ""}`.trim() : "ไม่ระบุชื่อ")}
+                </span>
               </p>
             </div>
           </div>
@@ -518,7 +524,7 @@ const handleQuickSaveLocation = async () => {
           <Card className="rounded-2xl border-emerald-100 shadow-sm overflow-hidden bg-white">
             <div className="h-1 bg-gradient-to-r from-emerald-400 to-teal-500" />
             <CardHeader
-              onClick={() => toggleSection("secLocation" as any)}
+              onClick={() => toggleSection("secLocation")}
               className="py-3.5 px-5 bg-emerald-50/50 hover:bg-emerald-50 transition cursor-pointer select-none border-b border-zinc-100"
             >
               <div className="flex items-center justify-between">
@@ -529,12 +535,12 @@ const handleQuickSaveLocation = async () => {
                   </CardTitle>
                 </div>
                 <div className="flex items-center gap-3">
-                  {!(openSections as any).secLocation && (
+                  {!openSections.secLocation && (
                     <span className="text-xs font-mono font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md hidden sm:inline-block">
                       {incidentAddress ? incidentAddress : "ยังไม่ได้ระบุสถานที่"} {latitude ? `(${latitude}, ${longitude})` : ""}
                     </span>
                   )}
-                  {(openSections as any).secLocation ? (
+                  {openSections.secLocation ? (
                     <ChevronUp className="w-5 h-5 text-zinc-500" />
                   ) : (
                     <ChevronDown className="w-5 h-5 text-zinc-500" />
@@ -543,7 +549,7 @@ const handleQuickSaveLocation = async () => {
               </div>
             </CardHeader>
 
-            {(openSections as any).secLocation && (
+            {openSections.secLocation && (
               <CardContent className="pt-5 pb-6 space-y-3">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 mb-1">
@@ -712,7 +718,6 @@ const handleQuickSaveLocation = async () => {
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
-                            placeholder="120"
                             value={sbp}
                             onChange={(e) => setSbp(e.target.value)}
                             className="w-full h-10 px-2 rounded-xl border border-zinc-200 text-center font-mono text-sm focus:outline-none focus:border-sky-500 bg-zinc-50/50"
@@ -720,7 +725,6 @@ const handleQuickSaveLocation = async () => {
                           <span className="text-zinc-400">/</span>
                           <input
                             type="number"
-                            placeholder="80"
                             value={dbp}
                             onChange={(e) => setDbp(e.target.value)}
                             className="w-full h-10 px-2 rounded-xl border border-zinc-200 text-center font-mono text-sm focus:outline-none focus:border-sky-500 bg-zinc-50/50"
@@ -729,10 +733,9 @@ const handleQuickSaveLocation = async () => {
                       </div>
 
                       <div className="space-y-1">
-                        <span className="text-[11px] font-semibold text-zinc-500">ชีพจร (PR ครั้ง/นาที)</span>
+                        <span className="text-[11px] font-semibold text-zinc-500">ชีพจร (PR)</span>
                         <input
                           type="number"
-                          placeholder="80"
                           value={pulseRate}
                           onChange={(e) => setPulseRate(e.target.value)}
                           className="w-full h-10 px-3 rounded-xl border border-zinc-200 text-center font-mono text-sm focus:outline-none focus:border-sky-500 bg-zinc-50/50"
@@ -740,10 +743,9 @@ const handleQuickSaveLocation = async () => {
                       </div>
 
                       <div className="space-y-1">
-                        <span className="text-[11px] font-semibold text-zinc-500">หายใจ (RR ครั้ง/นาที)</span>
+                        <span className="text-[11px] font-semibold text-zinc-500">หายใจ (RR)</span>
                         <input
                           type="number"
-                          placeholder="20"
                           value={respiratoryRate}
                           onChange={(e) => setRespiratoryRate(e.target.value)}
                           className="w-full h-10 px-3 rounded-xl border border-zinc-200 text-center font-mono text-sm focus:outline-none focus:border-sky-500 bg-zinc-50/50"
@@ -754,7 +756,6 @@ const handleQuickSaveLocation = async () => {
                         <span className="text-[11px] font-semibold text-zinc-500">ออกซิเจน (SpO2 %)</span>
                         <input
                           type="number"
-                          placeholder="98"
                           value={spo2}
                           onChange={(e) => setSpo2(e.target.value)}
                           className="w-full h-10 px-3 rounded-xl border border-sky-300 bg-sky-50/40 text-center font-mono text-sm focus:outline-none font-bold text-sky-800"
@@ -766,7 +767,6 @@ const handleQuickSaveLocation = async () => {
                         <input
                           type="number"
                           step="0.1"
-                          placeholder="36.5"
                           value={temperature}
                           onChange={(e) => setTemperature(e.target.value)}
                           className="w-full h-10 px-3 rounded-xl border border-zinc-200 text-center font-mono text-sm focus:outline-none focus:border-sky-500 bg-zinc-50/50"
@@ -774,10 +774,9 @@ const handleQuickSaveLocation = async () => {
                       </div>
 
                       <div className="space-y-1">
-                        <span className="text-[11px] font-semibold text-zinc-500">น้ำตาลปลายนิ้ว (DTX)</span>
+                        <span className="text-[11px] font-semibold text-zinc-500">น้ำตาล (DTX)</span>
                         <input
                           type="number"
-                          placeholder="110"
                           value={dtx}
                           onChange={(e) => setDtx(e.target.value)}
                           className="w-full h-10 px-3 rounded-xl border border-amber-300 bg-amber-50/40 text-center font-mono text-sm font-bold text-amber-900 focus:outline-none"
@@ -1359,6 +1358,36 @@ const handleQuickSaveLocation = async () => {
           </div>
         </form>
       </div>
+
+      {/* 🌟 Modern Success Modal (แสดงเฉพาะเมื่อกดบันทึกสำเร็จจริง ๆ เท่านั้น และมีปุ่มเดียวไปหน้า upload รูป) */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-zinc-100 text-center space-y-5">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-bold text-zinc-900">
+                บันทึกข้อมูลสำเร็จ
+              </h3>
+              <p className="text-xs text-zinc-500">
+                ข้อมูลการประเมินและการรักษาถูกบันทึกลงฐานข้อมูลเรียบร้อยแล้ว
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => router.push(`/cases/${id}/attachments`)}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>📸 ไปหน้าเพิ่มรูปภาพการปฏิบัติงาน</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }
