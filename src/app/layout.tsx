@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Prompt } from "next/font/google";
 import "./globals.css";
+import IdleTimer from "@/components/IdleTimer";
 
 const promptFont = Prompt({
   weight: ["300", "400", "500", "600", "700"],
@@ -22,6 +23,7 @@ export default function RootLayout({
   return (
     <html lang="th" suppressHydrationWarning>
       <body suppressHydrationWarning className={`${promptFont.className} antialiased selection:bg-orange-500 selection:text-white`}>
+        <IdleTimer />
         {children}
       </body>
     </html>

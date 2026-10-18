@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       })
         .setProtectedHeader({ alg: "HS256" })
         .setIssuedAt()
-        .setExpirationTime("1d")
+        .setExpirationTime("8h")
         .sign(JWT_SECRET);
 
       const cookieStore = await cookies();
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 60 * 60 * 24,
+        //maxAge: 60 * 60 * 24,
         path: "/",
       });
     } catch (jwtError: any) {
