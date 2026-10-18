@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/layout/app-layout";
+import { connection } from "next/server"; // 1. นำเข้า connection
 import { 
   Ambulance, 
   CheckCircle2, 
@@ -15,10 +16,14 @@ import {
 import MonthlyChart, { YearDataRecord } from "@/components/MonthlyChart";
 import OverallSection, { YearStatsRecord } from "@/components/OverallSection";
 import { prisma } from "@/lib/prisma";
+export const instant = false;
 
 async function getDashboardData() {
+  // 2. เรียกใช้ await connection() ก่อนเริ่มคำนวณเวลา
+  await connection();
+
   try {
-    const now = new Date();
+    const now = new Date(); // สามารถใช้งาน new Date() ได้อย่างถูกต้อง ไม่ติด Prerender Error
     const currentYear = now.getFullYear();
 
     const startOfDay = new Date(now);
@@ -28,6 +33,7 @@ async function getDashboardData() {
     endOfDay.setHours(23, 59, 59, 999);
 
     const activeStatuses = ["pending", "dispatched", "on_scene"];
+
 
     const [
       todayCases,
