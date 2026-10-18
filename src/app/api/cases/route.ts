@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
         { incident_address: { contains: search } },
       ];
     }
+    
 
     // 2. 🌟 นับสถิติสรุปภาพรวม (KPI Summary) แยกตามระดับความรุนแรง ไม่รวมเคสยกเลิก
     const [
