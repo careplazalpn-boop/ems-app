@@ -26,6 +26,7 @@ import {
   Lock,
   AlertCircle,
   CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 function CaseDetailContent() {
@@ -40,7 +41,7 @@ function CaseDetailContent() {
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [officers, setOfficers] = useState<any[]>([]);
 
-  // State ข้อมูลสั่งการเคส (เงื่อนไขที่ 2: ค่าเริ่มต้นเป็น "dispatched" สั่งการรถแล้ว)
+  // State ข้อมูลสั่งการเคส
   const [status, setStatus] = useState("dispatched");
   const [triageLevel, setTriageLevel] = useState("yellow");
   const [chiefComplaint, setChiefComplaint] = useState("");
@@ -54,86 +55,145 @@ function CaseDetailContent() {
   const [driverId, setDriverId] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
 
-  // State ควบคุม Modern Success Modal
+  // State สำหรับ Modal ยกเลิกเคส
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState("เหตุซ้ำซ้อน / รับแจ้งซ้ำ");
+  const [cancelNote, setCancelNote] = useState("");
+  const [previousStatus, setPreviousStatus] = useState("dispatched");
+  const [cancelling, setCancelling] = useState(false);
+
+  // State ควบคุม Modern Success Modal (สำหรับการบันทึกปกติ)
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // เงื่อนไขที่ 3: ดึงข้อมูลเดิมทั้งหมดกลับมาแสดงผล
-    useEffect(() => {
-  if (!id) return;
+  const CANCEL_REASONS = [
+    "เหตุซ้ำซ้อน / รับแจ้งซ้ำ",
+    "ผู้ป่วยหรือญาติปฏิเสธการรักษา/นำส่ง",
+    "ผู้ป่วยนำส่งโรงพยาบาลเองก่อนทีมไปถึง",
+    "ค้นหาผู้ป่วยหรือจุดเกิดเหตุไม่พบ",
+    "แจ้งเหตุเท็จ / ก่อกวน",
+    "ศูนย์สั่งการสั่งยกเลิกภารกิจ",
+    "อื่นๆ (ระบุในหมายเหตุ)",
+  ];
 
-  // 🌟 ป้องกัน Modal ค้างจาก Cache เมื่อกดกลับมาหน้าเดิม
-  setShowSuccessModal(false);
+  useEffect(() => {
+    if (!id) return;
 
-  async function loadCaseData() {
-    try {
-      const res = await fetch(`/api/cases/${id}?t=${Date.now()}`, {
-        cache: "no-store",
-      });
-      const data = await res.json();
+    setShowSuccessModal(false);
+    setShowCancelModal(false);
 
-      if (res.ok && data.success) {
-        setCaseData(data.case);
-        setHospitalPt(data.hospital_patient);
-        setVehicles(data.vehicles || []);
-        setOfficers(data.officers || []);
+    async function loadCaseData() {
+      try {
+        const res = await fetch(`/api/cases/${id}?t=${Date.now()}`, {
+          cache: "no-store",
+        });
+        const data = await res.json();
 
-        // เซ็ตค่าฟอร์มต่างๆ ตามปกติ...
-        setChiefComplaint(data.case.chief_complaint || "");
-        setIncidentAddress(data.case.incident_address || "");
-        setCallerName(data.case.caller_name || "");
-        setCallerPhone(data.case.caller_phone || "");
+        if (res.ok && data.success) {
+          setCaseData(data.case);
+          setHospitalPt(data.hospital_patient);
+          setVehicles(data.vehicles || []);
+          setOfficers(data.officers || []);
 
-        if (data.case.triage_level) {
-          setTriageLevel(data.case.triage_level);
+          setChiefComplaint(data.case?.chief_complaint || "");
+          setIncidentAddress(data.case?.incident_address || "");
+          setCallerName(data.case?.caller_name || "");
+          setCallerPhone(data.case?.caller_phone || "");
+
+          if (data.case?.triage_level) {
+            setTriageLevel(data.case.triage_level);
+          }
+          if (data.case?.status) {
+            setStatus(data.case.status);
+            setPreviousStatus(data.case.status);
+          }
+
+          // จัดการข้อมูล Dispatch ล่าสุด
+          if (data.latest_dispatch) {
+            const ld = data.latest_dispatch;
+            if (ld.vehicle_id) {
+              setSelectedVehicle(String(ld.vehicle_id));
+            }
+            if (ld.leader_id) {
+              setLeaderId(String(ld.leader_id));
+            }
+            if (ld.driver_id) {
+              setDriverId(String(ld.driver_id));
+            }
+            if (Array.isArray(ld.member_ids)) {
+              setSelectedMembers(ld.member_ids.map((m: any) => Number(m)));
+            }
+          }
+        } else {
+          alert(data.error || "เกิดข้อผิดพลาดในการดึงข้อมูลเคส");
         }
-        if (data.case.status) {
-          setStatus(data.case.status);
-        }
-
-        if (data.latest_dispatch) {
-          if (data.latest_dispatch.vehicle_id) {
-            setSelectedVehicle(String(data.latest_dispatch.vehicle_id));
-          }
-          if (data.latest_dispatch.leader_id) {
-            setLeaderId(String(data.latest_dispatch.leader_id));
-          }
-          if (data.latest_dispatch.driver_id) {
-            setDriverId(String(data.latest_dispatch.driver_id));
-          }
-          if (Array.isArray(data.latest_dispatch.member_ids)) {
-            setSelectedMembers(data.latest_dispatch.member_ids);
-          }
-        }
-      } else {
-        alert(data.error || "เกิดข้อผิดพลาดในการดึงข้อมูลเคส");
+      } catch (err) {
+        console.error("Load Case Error:", err);
+        alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูลเคสได้");
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error("Load Case Error:", err);
-      alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูลเคสได้");
-    } finally {
-      setLoading(false);
     }
-  }
     loadCaseData();
   }, [id]);
 
-
-    const toggleMember = (officerId: number) => {
-      setSelectedMembers((prev) =>
-        prev.includes(officerId)
-          ? prev.filter((mid) => mid !== officerId)
-          : [...prev, officerId]
-      );
-    };
-
-    // ตรวจสอบความพร้อมของหัวหน้าชุดและคนขับ เพื่อเปิดให้เลือกผู้ร่วมปฏิบัติการ
-    const isLeadersAssigned = Boolean(leaderId && driverId);
-
-    // เงื่อนไขที่ 1: ตรวจสอบความครบถ้วนของข้อมูลก่อนอนุญาตให้คลิกบันทึก
-    const isFormValid = Boolean(
-      selectedVehicle && leaderId && driverId && status
+  const toggleMember = (officerId: number) => {
+    setSelectedMembers((prev) =>
+      prev.includes(officerId)
+        ? prev.filter((mid) => mid !== officerId)
+        : [...prev, officerId]
     );
+  };
 
+  const isLeadersAssigned = Boolean(leaderId && driverId);
+  const isFormValid = Boolean(selectedVehicle && leaderId && driverId && status);
+
+  // 🌟 ดักจับการเปลี่ยน Status เพื่อเปิด Modal ยกเลิกเคส
+  const handleStatusChange = (newStatus: string) => {
+    if (newStatus === "cancelled") {
+      setPreviousStatus(status);
+      setStatus("cancelled");
+      setShowCancelModal(true);
+    } else {
+      setStatus(newStatus);
+    }
+  };
+
+  // ปิด Modal และคืนค่าสถานะเดิม
+  const handleDismissCancelModal = () => {
+    setShowCancelModal(false);
+    setStatus(previousStatus);
+  };
+
+  // 🌟 ยืนยันการยกเลิกเคส บันทึกทันทีและพากลับหน้ารายการเคส (/cases)
+  const handleConfirmCancel = async () => {
+    setCancelling(true);
+    try {
+      const res = await fetch(`/api/cases/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "cancelled",
+          cancellation_reason: cancelReason,
+          cancellation_note: cancelNote || null,
+          cancelled_at: new Date().toISOString(),
+        }),
+      });
+
+      if (res.ok) {
+        setShowCancelModal(false);
+        router.push("/cases");
+      } else {
+        const result = await res.json();
+        alert(result.error || "เกิดข้อผิดพลาดในการยกเลิกเคส");
+      }
+    } catch (err) {
+      alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อยกเลิกเคสได้");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  // บันทึกฟอร์มสั่งการปกติ
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -165,12 +225,12 @@ function CaseDetailContent() {
       const result = await res.json();
 
       if (res.ok) {
-        // 🌟 เปิด Modal แจ้งเตือนความสำเร็จเฉพาะตอนกดปุ่มบันทึกผ่านแล้วเท่านั้น
         setShowSuccessModal(true);
       } else {
-        const errMsg = typeof result.error === "string" 
-          ? result.error 
-          : "เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง";
+        const errMsg =
+          typeof result.error === "string"
+            ? result.error
+            : "เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง";
         alert(errMsg);
       }
     } catch (err) {
@@ -191,33 +251,111 @@ function CaseDetailContent() {
     );
   }
 
-  const ptName = hospitalPt
-    ? hospitalPt.name
-    : caseData?.ems_patient
-    ? `${caseData.ems_patient.pname || ""}${caseData.ems_patient.fname || ""} ${caseData.ems_patient.lname || ""}`.trim()
-    : "ไม่ระบุชื่อ / นิรนาม";
+  // 1. ประมวลผลชื่อและ HN/ID ผู้ป่วย
+  let ptName = "ไม่ระบุชื่อ / นิรนาม";
+  let ptHnDisplay = "-";
 
-  const ptGender = hospitalPt
-    ? hospitalPt.gender
-    : caseData?.ems_patient?.gender === "1"
-    ? "ชาย"
-    : caseData?.ems_patient?.gender === "2"
-    ? "หญิง"
-    : "ไม่ระบุ";
+  if (caseData?.patient_source === "HOSPITAL") {
+    if (hospitalPt) {
+      if (hospitalPt.name) {
+        ptName = hospitalPt.name;
+      } else {
+        const combined = `${hospitalPt.pname || ""}${hospitalPt.fname || ""} ${hospitalPt.lname || ""}`.trim();
+        ptName = combined || "ไม่ระบุชื่อ";
+      }
+    }
+    ptHnDisplay = caseData?.patient_hn || "-";
+  } else {
+    const ep = caseData?.ems_patient;
+    if (ep) {
+      const combined = `${ep.pname || ""}${ep.fname || ""} ${ep.lname || ""}`.trim();
+      ptName = combined || "ไม่ระบุชื่อ";
+      ptHnDisplay = ep.id ? `ID: ${ep.id}` : "-";
+    }
+  }
 
-  const ptAge = hospitalPt
-    ? hospitalPt.age
-    : caseData?.ems_patient?.age
-    ? `${caseData.ems_patient.age} ปี`
-    : "-";
+  // 2. ข้อมูลเพศ
+  const ptGender =
+    hospitalPt?.sex === "1" || hospitalPt?.sex === "M"
+      ? "ชาย"
+      : hospitalPt?.sex === "2" || hospitalPt?.sex === "F"
+      ? "หญิง"
+      : caseData?.ems_patient?.gender === "1"
+      ? "ชาย"
+      : caseData?.ems_patient?.gender === "2"
+      ? "หญิง"
+      : "ไม่ระบุ";
 
-  const ptHn = caseData?.patient_hn || "-";
+  // 3. ข้อมูลอายุ
+  let ptAge = "-";
+  if (hospitalPt?.birthday) {
+    const birthYear = new Date(hospitalPt.birthday).getFullYear();
+    const currentYear = new Date().getFullYear();
+    if (!isNaN(birthYear)) {
+      ptAge = `${currentYear - birthYear} ปี`;
+    }
+  } else if (caseData?.ems_patient?.age) {
+    ptAge = `${caseData.ems_patient.age} ปี`;
+  }
+
+  // 4. หมู่เลือด
+  const ptBloodGroup = hospitalPt?.bloodgrp || hospitalPt?.blood_group || "-";
+
+  // 5. สถานะเสียชีวิต
+  const isDeceased = hospitalPt?.death === "Y" || Boolean(hospitalPt?.is_deceased);
   const hasCoordinates = Boolean(caseData?.latitude && caseData?.longitude);
+
+  // 6. ป้ายสถานะสำหรับแสดงบน Header
+  const renderStatusBadge = (st: string) => {
+    switch (st) {
+      case "pending":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <Clock className="w-3 h-3 text-amber-500" />
+            รอสั่งการ
+          </span>
+        );
+      case "dispatched":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+            <Ambulance className="w-3 h-3 text-sky-500" />
+            สั่งการรถแล้ว
+          </span>
+        );
+      case "on_scene":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <MapPin className="w-3 h-3 text-indigo-500" />
+            ถึงที่เกิดเหตุ
+          </span>
+        );
+      case "completed":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+            เสร็จสิ้น
+          </span>
+        );
+      case "cancelled":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+            <XCircle className="w-3 h-3 text-rose-500" />
+            ยกเลิกเคส
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-700 border border-zinc-200">
+            {st}
+          </span>
+        );
+    }
+  };
 
   return (
     <AppLayout>
       <div className="w-full space-y-6 pb-16">
-        {/* Header แถบบน */}
+        {/* Header แถบบน พร้อมสถานะเคสและข้อมูลผู้ป่วย */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-zinc-200/80 shadow-xs">
           <div className="flex items-center gap-3.5">
             <Link
@@ -227,21 +365,25 @@ function CaseDetailContent() {
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 font-mono">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-lg sm:text-xl font-bold font-mono text-zinc-900">
                   {caseData?.case_number}
-                </h2>
-                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md uppercase bg-zinc-100 text-zinc-700 border border-zinc-200">
+                </span>
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200">
                   {caseData?.patient_source}
                 </span>
+                {/* 🌟 แสดงป้ายสถานะของเคสบน Header */}
+                {renderStatusBadge(status)}
               </div>
-              <p className="text-xs text-zinc-500 mt-0.5 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5" />
-                <span>
-                  รับแจ้งเมื่อ:{" "}
-                  {caseData?.created_at
-                    ? new Date(caseData.created_at).toLocaleString("th-TH")
-                    : "-"}
+
+              {/* แสดง HN/ID และชื่อผู้ป่วยตามมาตรฐาน */}
+              <p className="text-xs text-zinc-600 mt-1 flex items-center gap-1.5 font-medium flex-wrap">
+                <span className="text-zinc-400 font-mono">
+                  {caseData?.patient_source === "HOSPITAL" ? `HN: ${ptHnDisplay}` : ptHnDisplay}
+                </span>
+                <span className="text-zinc-300">|</span>
+                <span className="text-zinc-800 font-bold">
+                  ผู้ป่วย: {ptName}
                 </span>
               </p>
             </div>
@@ -277,23 +419,21 @@ function CaseDetailContent() {
               </CardHeader>
               <CardContent className="pt-5 pb-5">
                 <div className="flex flex-col sm:flex-row gap-5 items-start">
-                  <div className="w-28 h-32 rounded-xl border border-dashed border-sky-200 bg-sky-50/30 overflow-hidden flex items-center justify-center shrink-0 relative">
-                    {ptHn !== "-" ? (
-                      <img
-                        src={`/uploads/patient/${ptHn}.webp?v=${ptHn}`}
-                        alt="Patient Photo"
-                        className={`w-full h-full object-cover ${
-                          hospitalPt?.is_deceased ? "grayscale" : ""
-                        }`}
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                        }}
-                      />
-                    ) : (
-                      <User className="w-10 h-10 text-sky-300 stroke-1" />
-                    )}
+                  <div className="w-28 h-32 rounded-xl border border-sky-100 bg-zinc-50 overflow-hidden flex items-center justify-center shrink-0 relative shadow-2xs">
+                    <img
+                      src={
+                        caseData?.patient_hn && caseData.patient_hn !== "-"
+                          ? `/uploads/patient/${caseData.patient_hn}.webp?v=${caseData.patient_hn}`
+                          : "/images/avatars/default.png"
+                      }
+                      alt="Patient Photo"
+                      className={`w-full h-full object-cover ${isDeceased ? "grayscale" : ""}`}
+                      onError={(e) => {
+                        e.currentTarget.src = "/images/avatars/default.png";
+                      }}
+                    />
 
-                    {hospitalPt?.is_deceased && (
+                    {isDeceased && (
                       <div className="absolute inset-x-0 bottom-1.5 bg-red-600/90 text-white text-[9px] font-bold text-center py-0.5 flex items-center justify-center gap-0.5">
                         <Skull className="w-2.5 h-2.5" />
                         <span>เสียชีวิตแล้ว</span>
@@ -308,8 +448,10 @@ function CaseDetailContent() {
                     </div>
 
                     <div>
-                      <span className="text-zinc-400 block mb-0.5">HN</span>
-                      <span className="font-mono font-bold text-sky-700">{ptHn}</span>
+                      <span className="text-zinc-400 block mb-0.5">
+                        {caseData?.patient_source === "HOSPITAL" ? "HN" : "รหัสอ้างอิง"}
+                      </span>
+                      <span className="font-mono font-bold text-sky-700">{ptHnDisplay}</span>
                     </div>
 
                     <div>
@@ -322,7 +464,7 @@ function CaseDetailContent() {
                     <div>
                       <span className="text-zinc-400 block mb-0.5">หมู่เลือด</span>
                       <span className="font-semibold text-rose-600">
-                        {hospitalPt?.blood_group || "-"}
+                        {ptBloodGroup}
                       </span>
                     </div>
 
@@ -417,7 +559,7 @@ function CaseDetailContent() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-5 pb-5 space-y-4">
-                {/* 1. เลือกรถพยาบาล (แสดงเฉพาะ ทะเบียนรถ และ ยี่ห้อ) */}
+                {/* 1. เลือกรถพยาบาล */}
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 mb-1.5 flex items-center gap-1.5">
                     <Ambulance className="w-4 h-4 text-sky-600" />
@@ -434,7 +576,7 @@ function CaseDetailContent() {
                   >
                     <option value="">-- กรุณาเลือกรถพยาบาล --</option>
                     {vehicles.map((v) => (
-                      <option key={`veh-${v.vehicle_id}`} value={v.vehicle_id}>
+                      <option key={`veh-${v.vehicle_id}`} value={String(v.vehicle_id)}>
                         {v.plate_number} {v.brand ? `(${v.brand})` : ""}
                       </option>
                     ))}
@@ -464,7 +606,7 @@ function CaseDetailContent() {
                   >
                     <option value="">-- เลือกหัวหน้าชุด --</option>
                     {officers.map((u) => (
-                      <option key={`leader-${u.id}`} value={u.id}>
+                      <option key={`leader-${u.id}`} value={String(u.id)}>
                         {u.name} ({u.role})
                       </option>
                     ))}
@@ -494,14 +636,14 @@ function CaseDetailContent() {
                   >
                     <option value="">-- เลือกคนขับรถ --</option>
                     {officers.map((u) => (
-                      <option key={`driver-${u.id}`} value={u.id}>
+                      <option key={`driver-${u.id}`} value={String(u.id)}>
                         {u.name} ({u.role})
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* 4. ผู้ร่วมปฏิบัติการ (ปลดล็อคเมื่อเลือกหัวหน้าชุดและคนขับรถแล้วเท่านั้น) */}
+                {/* 4. ผู้ร่วมปฏิบัติการ */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-semibold text-zinc-700 flex items-center gap-1.5">
@@ -583,14 +725,14 @@ function CaseDetailContent() {
                   </select>
                 </div>
 
-                {/* 5. สถานะเคส (เงื่อนไขที่ 2: ค่าเริ่มต้นคือ "dispatched" สั่งการรถแล้ว) */}
+                {/* สถานะเคส (เชื่อม handleStatusChange) */}
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 mb-1.5">
                     สถานะการปฏิบัติการ (Status) <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={status}
-                    onChange={(e) => setStatus(e.target.value)}
+                    onChange={(e) => handleStatusChange(e.target.value)}
                     className="w-full h-10 px-3 rounded-xl border border-zinc-200 bg-zinc-50/50 text-xs sm:text-sm font-semibold text-zinc-800 focus:bg-white focus:outline-none"
                   >
                     <option value="pending">⏳ รอสั่งการ (Pending)</option>
@@ -601,7 +743,6 @@ function CaseDetailContent() {
                   </select>
                 </div>
 
-                {/* กล่องแจ้งเตือนเมื่อยังกรอกไม่ครบ */}
                 {!isFormValid && (
                   <div className="flex items-start gap-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200/80 text-[11px] text-rose-700">
                     <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -611,7 +752,6 @@ function CaseDetailContent() {
                   </div>
                 )}
 
-                {/* ปุ่มบันทึกการสั่งการ (เงื่อนไขที่ 1: Disable หากข้อมูลยังไม่ครบ) */}
                 <button
                   type="submit"
                   disabled={!isFormValid || submitting}
@@ -628,21 +768,84 @@ function CaseDetailContent() {
                 </button>
               </CardContent>
             </Card>
-
-            <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-500 space-y-1.5">
-              <div className="flex items-center gap-1.5 font-semibold text-zinc-700">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>ขั้นตอนการสั่งการ</span>
-              </div>
-              <p>
-                เลือกรถพยาบาล ระบุหัวหน้าชุดและคนขับรถ จากนั้นจึงเลือกผู้ร่วมปฏิบัติการ เมื่อบันทึกเสร็จสิ้นระบบจะนำท่านเข้าสู่หน้าบันทึกรายละเอียด ณ ที่เกิดเหตุทันที
-              </p>
-            </div>
           </div>
         </form>
       </div>
 
-      {/* 🌟 Modern Success Modal สำหรับหน้าสั่งการเคสหลัก */}      
+      {/* 🌟 Modal บันทึกรายละเอียดการยกเลิกเคส */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-zinc-100 space-y-4">
+            <div className="flex items-center gap-3 border-b border-zinc-100 pb-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900">
+                  ระบุสาเหตุการยกเลิกเคส ({caseData?.case_number})
+                </h3>
+                <p className="text-xs text-zinc-500">
+                  กรุณาระบุเหตุผลและรายละเอียดเพื่อบันทึกประวัติการยกเลิกภารกิจ
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1.5">
+                  สาเหตุการยกเลิก <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl border border-zinc-200 bg-zinc-50 text-xs sm:text-sm font-medium focus:bg-white focus:outline-none"
+                >
+                  {CANCEL_REASONS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1.5">
+                  รายละเอียดเพิ่มเติม / ผู้สั่งยกเลิก
+                </label>
+                <textarea
+                  rows={3}
+                  value={cancelNote}
+                  onChange={(e) => setCancelNote(e.target.value)}
+                  placeholder="ระบุข้อความเพิ่มเติม เช่น เบอร์ติดต่อผู้ยกเลิก หรือเหตุผลประกอบ..."
+                  className="w-full p-3 rounded-xl border border-zinc-200 bg-zinc-50 text-xs sm:text-sm focus:bg-white focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-100">
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={handleDismissCancelModal}
+                className="px-4 py-2.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-xs font-semibold text-zinc-700 transition cursor-pointer"
+              >
+                ยกเลิก (ไม่เปลี่ยนสถานะ)
+              </button>
+
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={handleConfirmCancel}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-sm shadow-rose-600/20 cursor-pointer disabled:opacity-50"
+              >
+                {cancelling ? "กำลังบันทึก..." : "ยืนยันการยกเลิกเคส"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modern Success Modal (สำหรับการสั่งการปกติ) */}      
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-zinc-100 text-center space-y-5">

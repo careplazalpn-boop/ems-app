@@ -8,8 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Camera,
   Upload,
-  ArrowLeft,
-  CheckCircle2,
   Trash2,
   Image as ImageIcon,
   Siren,
@@ -17,6 +15,13 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
+  ArrowLeft,
+  MapPin,
+  ExternalLink,
+  Clock,
+  Ambulance,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 async function processImageToWebP(
@@ -80,6 +85,10 @@ function AttachmentsContent() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<any[]>([]);
+
+  // 🌟 เพิ่ม State สำหรับเก็บข้อมูลเคสและผู้ป่วยเพื่อแสดงบน Header
+  const [caseData, setCaseData] = useState<any>(null);
+  const [hospitalPt, setHospitalPt] = useState<any>(null);
   
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [selectedThumbs, setSelectedThumbs] = useState<File[]>([]);
@@ -102,20 +111,34 @@ function AttachmentsContent() {
 
   useEffect(() => {
     if (!id) return;
-    async function loadAttachments() {
+
+    async function loadData() {
       try {
-        const res = await fetch(`/api/cases/${id}/attachments?t=${Date.now()}`);
-        const data = await res.json();
-        if (res.ok && data.success) {
-          setAttachments(data.attachments || []);
+        // 🌟 ดึงข้อมูลรายละเอียดเคสและข้อมูลรูปภาพพร้อมกัน
+        const [caseRes, attRes] = await Promise.all([
+          fetch(`/api/cases/${id}?t=${Date.now()}`),
+          fetch(`/api/cases/${id}/attachments?t=${Date.now()}`),
+        ]);
+
+        const caseJson = await caseRes.json();
+        const attJson = await attRes.json();
+
+        if (caseRes.ok && caseJson.success) {
+          setCaseData(caseJson.case);
+          setHospitalPt(caseJson.hospital_patient);
+        }
+
+        if (attRes.ok && attJson.success) {
+          setAttachments(attJson.attachments || []);
         }
       } catch (err) {
-        console.error("Error loading attachments:", err);
+        console.error("Error loading data:", err);
       } finally {
         setLoading(false);
       }
     }
-    loadAttachments();
+
+    loadData();
   }, [id]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -173,7 +196,7 @@ function AttachmentsContent() {
         setSelectedThumbs([]);
         setPreviewUrls([]);
         setCaption("");
-        setShowSuccessModal(true); // 🌟 สั่งเปิด Modal สำเร็จตรงนี้
+        setShowSuccessModal(true);
       } else {
         alert(data.error || "เกิดข้อผิดพลาดในการอัปโหลด");
       }
@@ -185,7 +208,7 @@ function AttachmentsContent() {
     }
   };
 
-  // ฟังก์ชันดำเนินการลบรูปภาพจริงหลังจากกดConfirm ใน Modal
+  // ดำเนินการลบรูปภาพจริงหลังจากกดยืนยันใน Modal
   const confirmDeleteAttachment = async () => {
     if (!imageToDelete) return;
 
@@ -197,8 +220,8 @@ function AttachmentsContent() {
 
       if (res.ok && data.success) {
         setAttachments((prev) => prev.filter((item) => item.id !== imageToDelete.id));
-        setActiveImageIndex(null); // ปิด Lightbox หากเปิดดูภาพนั้นอยู่
-        setImageToDelete(null); // ปิด Modal ยืนยันการลบ
+        setActiveImageIndex(null);
+        setImageToDelete(null);
       } else {
         alert(data.error || "ไม่สามารถลบรูปภาพได้");
       }
@@ -261,34 +284,131 @@ function AttachmentsContent() {
     );
   }
 
+  // 🌟 ประมวลผลชื่อผู้ป่วยและ HN/ID ให้เป็นมาตรฐานเดียวกัน
+  let ptName = "ไม่ระบุชื่อ / นิรนาม";
+  let ptHnDisplay = "-";
+
+  if (caseData?.patient_source === "HOSPITAL") {
+    if (hospitalPt) {
+      if (hospitalPt.name) {
+        ptName = hospitalPt.name;
+      } else {
+        const combined = `${hospitalPt.pname || ""}${hospitalPt.fname || ""} ${hospitalPt.lname || ""}`.trim();
+        ptName = combined || "ไม่ระบุชื่อ";
+      }
+    }
+    ptHnDisplay = caseData?.patient_hn || "-";
+  } else {
+    const ep = caseData?.ems_patient;
+    if (ep) {
+      const combined = `${ep.pname || ""}${ep.fname || ""} ${ep.lname || ""}`.trim();
+      ptName = combined || "ไม่ระบุชื่อ";
+      ptHnDisplay = ep.id ? `ID: ${ep.id}` : "-";
+    }
+  }
+
+  // 🌟 เรนเดอร์ป้ายสถานะมาตรฐาน
+  const renderStatusBadge = (st: string) => {
+    switch (st) {
+      case "pending":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <Clock className="w-3 h-3 text-amber-500" />
+            รอสั่งการ
+          </span>
+        );
+      case "dispatched":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+            <Ambulance className="w-3 h-3 text-sky-500" />
+            สั่งการรถแล้ว
+          </span>
+        );
+      case "on_scene":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <MapPin className="w-3 h-3 text-indigo-500" />
+            ถึงที่เกิดเหตุ
+          </span>
+        );
+      case "completed":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+            เสร็จสิ้น
+          </span>
+        );
+      case "cancelled":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+            <XCircle className="w-3 h-3 text-rose-500" />
+            ยกเลิกเคส
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-700 border border-zinc-200">
+            {st || "-"}
+          </span>
+        );
+    }
+  };
+
+  const hasCoordinates = Boolean(caseData?.latitude && caseData?.longitude);
+
   return (
     <AppLayout>
       <div className="w-full space-y-6 pb-24">
-        {/* Header แถบบน */}
+        {/* Header แถบบน ปรับปรุงให้เป็นมาตรฐานเดียวกับทุกหน้า */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-zinc-200/80 shadow-xs">
           <div className="flex items-center gap-3.5">
             <Link
-              href={`/cases/${id}/treatment`}
-              className="h-10 w-10 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 flex items-center justify-center text-zinc-600 transition shadow-2xs"
+              href={`/cases/${id}`}
+              className="h-10 w-10 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 flex items-center justify-center text-zinc-600 transition shadow-2xs cursor-pointer"
+              title="ย้อนกลับไปหน้ารายละเอียดเคส"
             >
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div>
-              <h2 className="text-lg sm:text-xl font-bold text-zinc-900">
-                เพิ่มรูปภาพการปฏิบัติงาน (Gallery)
-              </h2>
-              <p className="text-xs text-zinc-500 mt-0.5">
-                คลิกที่รูปเพื่อดูภาพต้นฉบับขนาดใหญ่ หรือกดลบเพื่อจัดการรูปภาพ
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-lg sm:text-xl font-bold font-mono text-zinc-900">
+                  {caseData?.case_number || "..."}
+                </span>
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200">
+                  {caseData?.patient_source || "HOSPITAL"}
+                </span>
+                {renderStatusBadge(caseData?.status || "pending")}
+              </div>
+
+              {/* แสดง HN/ID และชื่อผู้ป่วยตามมาตรฐานเดียวกัน */}
+              <p className="text-xs text-zinc-600 mt-1 flex items-center gap-1.5 font-medium flex-wrap">
+                <span className="text-zinc-400 font-mono">
+                  {caseData?.patient_source === "HOSPITAL"
+                    ? `HN: ${ptHnDisplay}`
+                    : ptHnDisplay}
+                </span>
+                <span className="text-zinc-300">|</span>
+                <span className="text-zinc-800 font-bold">
+                  ผู้ป่วย: {ptName}
+                </span>
               </p>
             </div>
           </div>
 
-          <Link
-            href="/cases"
-            className="px-4 py-2 rounded-xl bg-zinc-900 text-white text-xs font-bold hover:bg-zinc-800 transition"
-          >
-            เสร็จสิ้นภารกิจ (กลับสู่หน้ารายการ)
-          </Link>
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            {hasCoordinates && (
+              <a
+                href={`https://www.google.com/maps?q=${caseData.latitude},${caseData.longitude}`}
+                target="_blank"
+                rel="noreferrer"
+                className="h-10 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs"
+              >
+                <MapPin className="w-4 h-4 text-emerald-600" />
+                <span>เปิดแผนที่นำทาง</span>
+                <ExternalLink className="w-3.5 h-3.5 text-emerald-500" />
+              </a>
+            )}
+          </div>
         </div>
 
         {/* ฟอร์มเลือกและอัปโหลดรูป */}
@@ -374,7 +494,7 @@ function AttachmentsContent() {
                         setSelectedThumbs([]);
                         setPreviewUrls([]);
                       }}
-                      className="text-xs text-rose-600 hover:underline font-semibold"
+                      className="text-xs text-rose-600 hover:underline font-semibold cursor-pointer"
                     >
                       ล้างทั้งหมด
                     </button>
@@ -387,7 +507,7 @@ function AttachmentsContent() {
                         <button
                           type="button"
                           onClick={() => removeSelectedFile(idx)}
-                          className="absolute top-1.5 right-1.5 bg-rose-600 text-white rounded-full p-1 opacity-90 hover:opacity-100 shadow"
+                          className="absolute top-1.5 right-1.5 bg-rose-600 text-white rounded-full p-1 opacity-90 hover:opacity-100 shadow cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -563,7 +683,7 @@ function AttachmentsContent() {
           </div>
         )}
 
-        {/* 🌟 Modern Success Modal (แจ้งเตือนอัปโหลดสำเร็จ ปุ่มตกลงปุ่มเดียว) */}
+        {/* Modern Success Modal */}
         {showSuccessModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-zinc-100 text-center space-y-5">
@@ -593,7 +713,7 @@ function AttachmentsContent() {
           </div>
         )}
 
-        {/* 🌟 Modern Delete Confirmation Modal (หน้าต่างยืนยันการลบรูปภาพ) */}
+        {/* Modern Delete Confirmation Modal */}
         {imageToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-zinc-100 text-center space-y-5">

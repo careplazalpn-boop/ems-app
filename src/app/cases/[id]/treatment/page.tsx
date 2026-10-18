@@ -9,8 +9,11 @@ import {
   Activity,
   Heart,
   Wind,
+  Clock,
   Eye,
   AlertCircle,
+  Ambulance,
+  XCircle,
   ShieldCheck,
   Stethoscope,
   Building2,
@@ -94,6 +97,7 @@ function TreatmentContent() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [caseData, setCaseData] = useState<any>(null);
+  const [patientDisplayName, setPatientDisplayName] = useState("กำลังโหลด...");
 
   // ข้อมูลพิกัดสถานที่เกิดเหตุ
   const [incidentAddress, setIncidentAddress] = useState("");
@@ -101,7 +105,6 @@ function TreatmentContent() {
   const [longitude, setLongitude] = useState("");
   const [gettingLocation, setGettingLocation] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
-
   const [openSections, setOpenSections] = useState({
     secLocation: true,
     sec1: true,
@@ -169,10 +172,8 @@ function TreatmentContent() {
   const [treatmentNotes, setTreatmentNotes] = useState("");
   const [caseStatus, setCaseStatus] = useState("completed");
 
-  // 🌟 ป้องกัน Modal ค้าง: กำหนดค่าเริ่มต้นเป็น false เสมอ
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // ฟังก์ชันดึงพิกัดปัจจุบันผ่าน Browser GPS
   const handleGetCurrentLocation = () => {
     if (!navigator.geolocation) {
       alert("เบราว์เซอร์ของคุณไม่รองรับการระบุตำแหน่ง GPS");
@@ -189,7 +190,7 @@ function TreatmentContent() {
       },
       (error) => {
         console.error("Geolocation Error:", error);
-        alert("ไม่สามารถดึงพิกัดได้ กรุณาตรวจสอบการอนุญาตเข้าถึงตำแหน่งในเบราว์เซอร์");
+        alert("ไม่สามารถดึงพิกัดได้");
         setGettingLocation(false);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -233,24 +234,11 @@ function TreatmentContent() {
       setIsDeceasedMode(true);
       setCannotAssessVitals(true);
       setCannotAssessNeuro(true);
-
-      setSbp("0");
-      setDbp("0");
-      setPulseRate("0");
-      setRespiratoryRate("0");
-      setSpo2("0");
-      setTemperature("");
-      setDtx("");
-
-      setGcsE("1");
-      setGcsV("1");
-      setGcsM("1");
-      setConsciousness("หมดสติปลุกไม่ตื่น");
-      setPupilRight("Dilated");
-      setPupilLeft("Dilated");
-
-      setBreathingType("ไม่หายใจ");
-      setCprPerformed(false);
+      setSbp("0"); setDbp("0"); setPulseRate("0"); setRespiratoryRate("0"); setSpo2("0");
+      setTemperature(""); setDtx("");
+      setGcsE("1"); setGcsV("1"); setGcsM("1"); setConsciousness("หมดสติปลุกไม่ตื่น");
+      setPupilRight("Dilated"); setPupilLeft("Dilated");
+      setBreathingType("ไม่หายใจ"); setCprPerformed(false);
       setInitialOutcome("เสียชีวิต ณ จุดเกิดเหตุ");
       setDestinationHospital("ไม่นำส่งโรงพยาบาล (เสียชีวิต / ปฏิเสธการรักษา)");
       setSelectedReasons(["ไม่นำส่ง / เสียชีวิต ณ จุดเกิดเหตุ"]);
@@ -259,23 +247,10 @@ function TreatmentContent() {
       setIsDeceasedMode(false);
       setCannotAssessVitals(false);
       setCannotAssessNeuro(false);
-
-      setSbp("");
-      setDbp("");
-      setPulseRate("");
-      setRespiratoryRate("");
-      setSpo2("");
-      setTemperature("");
-      setDtx("");
-      setBreathingType("ปกติ");
-
-      setGcsE("4");
-      setGcsV("5");
-      setGcsM("6");
-      setConsciousness("รู้สึกตัวดี");
-      setPupilRight("2mm RTL");
-      setPupilLeft("2mm RTL");
-
+      setSbp(""); setDbp(""); setPulseRate(""); setRespiratoryRate(""); setSpo2("");
+      setTemperature(""); setDtx(""); setBreathingType("ปกติ");
+      setGcsE("4"); setGcsV("5"); setGcsM("6"); setConsciousness("รู้สึกตัวดี");
+      setPupilRight("2mm RTL"); setPupilLeft("2mm RTL");
       setInitialOutcome("คงเดิม/คงที่");
       setDestinationHospital("โรงพยาบาลลำพูน");
       setSelectedReasons(["เหมาะสม/สามารถรักษาได้"]);
@@ -285,8 +260,6 @@ function TreatmentContent() {
 
   useEffect(() => {
     if (!id) return;
-
-    // 🌟 1. ล้างค่า Modal ทันทีที่เปิดหน้านี้หรือกดปุ่มย้อนกลับมา ป้องกัน Modal เด้งค้าง
     setShowSuccessModal(false);
 
     async function loadData() {
@@ -301,6 +274,29 @@ function TreatmentContent() {
           setIncidentAddress(data.case.incident_address || "");
           setLatitude(data.case.latitude ? String(data.case.latitude) : "");
           setLongitude(data.case.longitude ? String(data.case.longitude) : "");
+
+          // 🌟 เงื่อนไขการดึงชื่อผู้ป่วยตาม patient_source
+          let resolvedName = "ไม่ระบุชื่อ";
+          if (data.case.patient_source === "HOSPITAL") {
+            const hp = data.hospital_patient;
+            if (hp) {
+              const pname = hp.pname || "";
+              const fname = hp.fname || "";
+              const lname = hp.lname || "";
+              resolvedName = `${pname}${fname} ${lname}`.trim();
+            } else {
+              resolvedName = `HN: ${data.case.patient_hn || "-"}`;
+            }
+          } else {
+            const ep = data.case.ems_patient;
+            if (ep) {
+              const pname = ep.pname || "";
+              const fname = ep.fname || "";
+              const lname = ep.lname || "";
+              resolvedName = `${pname}${fname} ${lname}`.trim();
+            }
+          }
+          setPatientDisplayName(resolvedName);
 
           if (data.treatment) {
             const t = data.treatment;
@@ -338,19 +334,13 @@ function TreatmentContent() {
             }
 
             if (t.wound_types) {
-              try {
-                setSelectedWounds(JSON.parse(t.wound_types));
-              } catch (e) {}
+              try { setSelectedWounds(JSON.parse(t.wound_types)); } catch (e) {}
             }
             if (t.injured_organs) {
-              try {
-                setSelectedOrgans(JSON.parse(t.injured_organs));
-              } catch (e) {}
+              try { setSelectedOrgans(JSON.parse(t.injured_organs)); } catch (e) {}
             }
             if (t.hospital_decision_reasons) {
-              try {
-                setSelectedReasons(JSON.parse(t.hospital_decision_reasons));
-              } catch (e) {}
+              try { setSelectedReasons(JSON.parse(t.hospital_decision_reasons)); } catch (e) {}
             }
           }
         }
@@ -422,7 +412,6 @@ function TreatmentContent() {
 
       const data = await res.json();
       if (res.ok) {
-        // 🌟 2. เปิด Modal สำเร็จเฉพาะเมื่อกดบันทึกสำเร็จจริง ๆ เท่านั้น
         setShowSuccessModal(true);
       } else {
         alert(data.error || "เกิดข้อผิดพลาดในการบันทึก");
@@ -449,6 +438,52 @@ function TreatmentContent() {
     ? "N/A"
     : (parseInt(gcsE, 10) || 0) + (parseInt(gcsV, 10) || 0) + (parseInt(gcsM, 10) || 0);
 
+  const renderStatusBadge = (st: string) => {
+      switch (st) {
+        case "pending":
+          return (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+              <Clock className="w-3 h-3 text-amber-500" />
+              รอสั่งการ
+            </span>
+          );
+        case "dispatched":
+          return (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+              <Ambulance className="w-3 h-3 text-sky-500" />
+              สั่งการรถแล้ว
+            </span>
+          );
+        case "on_scene":
+          return (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+              <MapPin className="w-3 h-3 text-indigo-500" />
+              ถึงที่เกิดเหตุ
+            </span>
+          );
+        case "completed":
+          return (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+              เสร็จสิ้น
+            </span>
+          );
+        case "cancelled":
+          return (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+              <XCircle className="w-3 h-3 text-rose-500" />
+              ยกเลิกเคส
+            </span>
+          );
+        default:
+          return (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-700 border border-zinc-200">
+              {st || "-"}
+            </span>
+          );
+      }
+    };
+        
   return (
     <AppLayout>
       <div className="w-full space-y-6 pb-20">
@@ -457,7 +492,8 @@ function TreatmentContent() {
           <div className="flex items-center gap-3.5">
             <Link
               href={`/cases/${id}`}
-              className="h-10 w-10 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 flex items-center justify-center text-zinc-600 transition shadow-2xs"
+              className="h-10 w-10 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 flex items-center justify-center text-zinc-600 transition shadow-2xs cursor-pointer"
+              title="ย้อนกลับไปหน้ารายละเอียดเคส"
             >
               <ArrowLeft className="w-5 h-5" />
             </Link>
@@ -466,56 +502,41 @@ function TreatmentContent() {
                 <span className="text-lg sm:text-xl font-bold font-mono text-zinc-900">
                   {caseData?.case_number}
                 </span>
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  ใบบันทึกการดูแลรักษา ณ ที่เกิดเหตุ
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200">
+                  {caseData?.patient_source || "HOSPITAL"}
                 </span>
-                {isDeceasedMode && (
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-zinc-800 text-white flex items-center gap-1">
-                    <Skull className="w-3 h-3" />
-                    <span>ผู้ป่วยเสียชีวิต</span>
-                  </span>
-                )}
+                {/* 🌟 แสดงป้ายสถานะของเคสบน Header */}
+                {renderStatusBadge(caseData?.status || "pending")}
               </div>
-              
-              {/* 🌟 แสดง HN และชื่อ-นามสกุลผู้ป่วยต่อกันอย่างชัดเจน */}
-              <p className="text-xs text-zinc-600 mt-1 flex items-center gap-1.5 font-medium">
-                <span className="text-zinc-400 font-mono">HN: {caseData?.patient_hn || "-"}</span>
+
+              {/* 🌟 แสดง HN/ID และชื่อผู้ป่วยตามมาตรฐานเดียวกัน */}
+              <p className="text-xs text-zinc-600 mt-1 flex items-center gap-1.5 font-medium flex-wrap">
+                <span className="text-zinc-400 font-mono">
+                  {caseData?.patient_source === "HOSPITAL"
+                    ? `HN: ${caseData?.patient_hn || "-"}`
+                    : (caseData?.ems_patient?.id ? `ID: ${caseData.ems_patient.id}` : "-")}
+                </span>
                 <span className="text-zinc-300">|</span>
                 <span className="text-zinc-800 font-bold">
-                  ผู้ป่วย: {caseData?.hospital_patient?.name || (caseData?.ems_patient ? `${caseData.ems_patient.pname || ""}${caseData.ems_patient.fname || ""} ${caseData.ems_patient.lname || ""}`.trim() : "ไม่ระบุชื่อ")}
+                  ผู้ป่วย: {patientDisplayName || "ไม่ระบุชื่อ / นิรนาม"}
                 </span>
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={toggleDeceasedPreset}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 shadow-2xs cursor-pointer ${
-                isDeceasedMode
-                  ? "bg-rose-600 border-rose-600 text-white hover:bg-rose-700"
-                  : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border-zinc-300"
-              }`}
-            >
-              <Skull className={`w-3.5 h-3.5 ${isDeceasedMode ? "text-white" : "text-rose-500"}`} />
-              <span>{isDeceasedMode ? "ยกเลิกสถานะเสียชีวิต (คืนค่า)" : "ผู้ป่วยเสียชีวิต (DOA)"}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setAllSections(true)}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 transition shadow-2xs"
-            >
-              ขยายทั้งหมด
-            </button>
-            <button
-              type="button"
-              onClick={() => setAllSections(false)}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 transition shadow-2xs"
-            >
-              ย่อทั้งหมด
-            </button>
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            {caseData?.latitude && caseData?.longitude && (
+              <a
+                href={`https://www.google.com/maps?q=${caseData.latitude},${caseData.longitude}`}
+                target="_blank"
+                rel="noreferrer"
+                className="h-10 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs"
+              >
+                <MapPin className="w-4 h-4 text-emerald-600" />
+                <span>เปิดแผนที่นำทาง</span>
+                <ExternalLink className="w-3.5 h-3.5 text-emerald-500" />
+              </a>
+            )}
           </div>
         </div>
 

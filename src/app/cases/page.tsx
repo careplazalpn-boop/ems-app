@@ -21,18 +21,21 @@ import {
   User,
   Building2,
   ShieldCheck,
+  XCircle,
+  FileX2,
 } from "lucide-react";
 
 export default function CasesPage() {
   const [cases, setCases] = useState<any[]>([]);
   const [summary, setSummary] = useState({
     total: 0,
-    pending: 0,
-    dispatched: 0,
-    on_scene: 0,
-    completed: 0,
     red: 0,
+    yellow: 0,
+    green: 0,
+    white: 0,
+    cancelled: 0,
   });
+
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -41,7 +44,7 @@ export default function CasesPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCases, setTotalCases] = useState(0);
 
-  // ดึงข้อมูลเคสจาก API
+  // ดึงข้อมูลเคสจาก API[cite: 5]
   const fetchCases = useCallback(async () => {
     setLoading(true);
     try {
@@ -75,7 +78,7 @@ export default function CasesPage() {
     fetchCases();
   }, [fetchCases]);
 
-  // ฟังก์ชันแปลงรูปแบบวันที่/เวลาไทย
+  // ฟังก์ชันแปลงรูปแบบวันที่/เวลาไทย[cite: 5]
   const formatThaiDateTime = (dateString: string) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
@@ -85,7 +88,7 @@ export default function CasesPage() {
     }).format(date);
   };
 
-  // Badge แสดงระดับความรุนแรง (Triage)
+  // Badge แสดงระดับความรุนแรง (Triage)[cite: 5]
   const renderTriageBadge = (level: string) => {
     switch (level?.toLowerCase()) {
       case "red":
@@ -116,7 +119,7 @@ export default function CasesPage() {
     }
   };
 
-  // Badge แสดงสถานะเคส (Status)
+  // Badge แสดงสถานะเคส (Status)[cite: 5]
   const renderStatusBadge = (status: string) => {
     switch (status) {
       case "pending":
@@ -149,8 +152,9 @@ export default function CasesPage() {
         );
       case "cancelled":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-medium bg-zinc-100 text-zinc-500 border border-zinc-200">
-            ยกเลิก
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold bg-rose-100 text-rose-700 border border-rose-300 shadow-2xs">
+            <XCircle className="w-4 h-4 text-rose-600" />
+            ยกเลิกเคส
           </span>
         );
       default:
@@ -161,7 +165,7 @@ export default function CasesPage() {
   return (
     <AppLayout>
       <div className="w-full space-y-6 pb-12">
-        {/* Header ส่วนหัวของหน้า */}
+        {/* Header ส่วนหัวของหน้า[cite: 5] */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-zinc-200/80 shadow-xs">
           <div className="flex items-center gap-3.5">
             <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white flex items-center justify-center shadow-md shadow-rose-500/20">
@@ -202,9 +206,9 @@ export default function CasesPage() {
             </Link>
           </div>
         </div>
-
-        {/* 1. สรุปภาพรวมสถานะเคส (KPI Summary Cards) */}
+        {/* 1. สรุปภาพรวมเคสตามระดับความรุนแรงและเคสยกเลิก */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* การ์ด 1: เคสทั้งหมด (เฉพาะที่ปฏิบัติการ ไม่รวมยกเลิก) */}
           <div
             onClick={() => {
               setStatusFilter("all");
@@ -217,102 +221,112 @@ export default function CasesPage() {
                 : "bg-white border-zinc-200 hover:border-zinc-300"
             }`}
           >
-            <div className="text-xs font-medium opacity-80">เคสทั้งหมด</div>
+            <div className="text-xs font-medium opacity-80">เคสทั้งหมด (ปฏิบัติการ)</div>
             <div className="text-2xl font-black mt-1">{summary.total}</div>
           </div>
 
+          {/* การ์ด 2: วิกฤต (Red) */}
           <div
             onClick={() => {
-              setStatusFilter("pending");
+              setStatusFilter("all");
+              setTriageFilter("red");
               setPage(1);
             }}
             className={`p-4 rounded-2xl border transition cursor-pointer ${
-              statusFilter === "pending"
+              triageFilter === "red" && statusFilter !== "cancelled"
+                ? "bg-rose-600 text-white border-rose-600 shadow-sm"
+                : "bg-rose-50/50 border-rose-200 text-rose-900 hover:bg-rose-100/50"
+            }`}
+          >
+            <div className="text-xs font-medium opacity-90 flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+              <span>วิกฤต (Red)</span>
+            </div>
+            <div className="text-2xl font-black mt-1">{summary.red}</div>
+          </div>
+
+          {/* การ์ด 3: เร่งด่วน (Yellow) */}
+          <div
+            onClick={() => {
+              setStatusFilter("all");
+              setTriageFilter("yellow");
+              setPage(1);
+            }}
+            className={`p-4 rounded-2xl border transition cursor-pointer ${
+              triageFilter === "yellow" && statusFilter !== "cancelled"
                 ? "bg-amber-500 text-white border-amber-500 shadow-sm"
                 : "bg-amber-50/50 border-amber-200 text-amber-900 hover:bg-amber-100/50"
             }`}
           >
             <div className="text-xs font-medium opacity-90 flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" />
-              <span>รอสั่งการ</span>
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>เร่งด่วน (Yellow)</span>
             </div>
-            <div className="text-2xl font-black mt-1">{summary.pending}</div>
+            <div className="text-2xl font-black mt-1">{summary.yellow}</div>
           </div>
 
+          {/* การ์ด 4: ไม่เร่งด่วน (Green) */}
           <div
             onClick={() => {
-              setStatusFilter("dispatched");
+              setStatusFilter("all");
+              setTriageFilter("green");
               setPage(1);
             }}
             className={`p-4 rounded-2xl border transition cursor-pointer ${
-              statusFilter === "dispatched"
-                ? "bg-sky-600 text-white border-sky-600 shadow-sm"
-                : "bg-sky-50/50 border-sky-200 text-sky-900 hover:bg-sky-100/50"
-            }`}
-          >
-            <div className="text-xs font-medium opacity-90 flex items-center gap-1">
-              <Ambulance className="w-3.5 h-3.5" />
-              <span>สั่งการรถแล้ว</span>
-            </div>
-            <div className="text-2xl font-black mt-1">{summary.dispatched}</div>
-          </div>
-
-          <div
-            onClick={() => {
-              setStatusFilter("on_scene");
-              setPage(1);
-            }}
-            className={`p-4 rounded-2xl border transition cursor-pointer ${
-              statusFilter === "on_scene"
-                ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                : "bg-indigo-50/50 border-indigo-200 text-indigo-900 hover:bg-indigo-100/50"
-            }`}
-          >
-            <div className="text-xs font-medium opacity-90 flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5" />
-              <span>ถึงที่เกิดเหตุ</span>
-            </div>
-            <div className="text-2xl font-black mt-1">{summary.on_scene}</div>
-          </div>
-
-          <div
-            onClick={() => {
-              setStatusFilter("completed");
-              setPage(1);
-            }}
-            className={`p-4 rounded-2xl border transition cursor-pointer ${
-              statusFilter === "completed"
+              triageFilter === "green" && statusFilter !== "cancelled"
                 ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
                 : "bg-emerald-50/50 border-emerald-200 text-emerald-900 hover:bg-emerald-100/50"
             }`}
           >
             <div className="text-xs font-medium opacity-90 flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>เสร็จสิ้น</span>
+              <span>ไม่เร่งด่วน (Green)</span>
             </div>
-            <div className="text-2xl font-black mt-1">{summary.completed}</div>
+            <div className="text-2xl font-black mt-1">{summary.green}</div>
           </div>
 
+          {/* การ์ด 5: ทั่วไป (White) */}
           <div
             onClick={() => {
-              setTriageFilter("red");
+              setStatusFilter("all");
+              setTriageFilter("white");
               setPage(1);
             }}
             className={`p-4 rounded-2xl border transition cursor-pointer ${
-              triageFilter === "red"
-                ? "bg-rose-600 text-white border-rose-600 shadow-sm"
-                : "bg-rose-50/50 border-rose-200 text-rose-900 hover:bg-rose-100/50"
+              triageFilter === "white" && statusFilter !== "cancelled"
+                ? "bg-zinc-700 text-white border-zinc-700 shadow-sm"
+                : "bg-zinc-50 border-zinc-200 text-zinc-800 hover:bg-zinc-100"
             }`}
           >
             <div className="text-xs font-medium opacity-90 flex items-center gap-1">
-              <AlertTriangle className="w-3.5 h-3.5" />
-              <span>เคสวิกฤต (Red)</span>
+              <Clock className="w-3.5 h-3.5" />
+              <span>ทั่วไป (White)</span>
             </div>
-            <div className="text-2xl font-black mt-1">{summary.red}</div>
+            <div className="text-2xl font-black mt-1">{summary.white}</div>
+          </div>
+
+          {/* การ์ด 6: ยกเลิกเคส */}
+          <div
+            onClick={() => {
+              setTriageFilter("all");
+              setStatusFilter("cancelled");
+              setPage(1);
+            }}
+            className={`p-4 rounded-2xl border transition cursor-pointer ${
+              statusFilter === "cancelled"
+                ? "bg-rose-700 text-white border-rose-700 shadow-sm"
+                : "bg-rose-100/40 border-rose-200 text-rose-800 hover:bg-rose-100/70"
+            }`}
+          >
+            <div className="text-xs font-medium opacity-90 flex items-center gap-1">
+              <XCircle className="w-3.5 h-3.5 text-rose-600" />
+              <span>ยกเลิกเคส</span>
+            </div>
+            <div className="text-2xl font-black mt-1">{summary.cancelled}</div>
           </div>
         </div>
 
-        {/* 2. ส่วนแถบค้นหาและตัวกรองข้อมูล */}
+        {/* 2. ส่วนแถบค้นหาและตัวกรองข้อมูล[cite: 5] */}
         <Card className="rounded-2xl border-zinc-200/80 shadow-xs bg-white">
           <CardContent className="p-4 sm:p-5">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -364,7 +378,7 @@ export default function CasesPage() {
           </CardContent>
         </Card>
 
-        {/* 3. รายการเคส */}
+        {/* 3. รายการเคส[cite: 5] */}
         {loading ? (
           <div className="py-20 text-center space-y-3">
             <RefreshCw className="w-8 h-8 text-rose-500 animate-spin mx-auto stroke-1" />
@@ -388,38 +402,66 @@ export default function CasesPage() {
         ) : (
           <div className="space-y-3">
             {cases.map((item) => {
-              const ptHn = item.patient_hn;
-              const hospitalPt = item.hospital_patient;
-              const ptName = hospitalPt
-                ? hospitalPt.name
-                : item.ems_patient
-                ? `${item.ems_patient.pname || ""}${item.ems_patient.fname || ""} ${item.ems_patient.lname || ""}`.trim()
-                : "ไม่ระบุชื่อ / นิรนาม";
+              const isCancelled = item.status === "cancelled";
+
+              // 1. จัดการชื่อผู้ป่วย
+              const ptName =
+                item.resolved_patient_name ||
+                item.hospital_patient?.name ||
+                (item.ems_patient
+                  ? `${item.ems_patient.pname || ""}${item.ems_patient.fname || ""} ${item.ems_patient.lname || ""}`.trim()
+                  : "ไม่ระบุชื่อ / นิรนาม");
+
+              // 2. จัดการ HN / ID
+              const ptHnDisplay =
+                item.patient_source === "HOSPITAL"
+                  ? item.resolved_hn || item.patient_hn || "-"
+                  : item.resolved_hn || (item.ems_patient_id ? `ID: ${item.ems_patient_id}` : "-");
+
+              // 3. จัดการสถานะการรักษา และ รพ. ปลายทาง
+              const latestTreatment = item.treatments?.[0];
+              const outcome =
+                item.initial_outcome ||
+                latestTreatment?.initial_outcome ||
+                "กำลังดำเนินการ";
+              const destHosp =
+                item.destination_hospital ||
+                latestTreatment?.destination_hospital ||
+                "-";
+
+              // 4. จัดการชื่อหัวหน้าชุด
+              const leaderDisplay = item.leader_name || "ยังไม่ระบุหัวหน้าชุด";
 
               return (
                 <div
                   key={item.id}
-                  className="bg-white rounded-2xl border border-zinc-200/80 p-4 sm:p-5 hover:border-zinc-300 hover:shadow-xs transition flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4"
+                  className={`rounded-2xl border p-4 sm:p-5 transition flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 ${
+                    isCancelled
+                      ? "bg-rose-50/20 border-rose-200/80 hover:border-rose-300"
+                      : "bg-white border-zinc-200/80 hover:border-zinc-300 hover:shadow-xs"
+                  }`}
                 >
                   {/* ข้อมูลรูปภาพผู้ป่วย & ข้อมูลเคสหลัก */}
                   <div className="flex items-start gap-4 flex-1 min-w-0">
-                    {/* 1. รูปภาพผู้ป่วย (Patient Image) */}
-                    <div className="w-14 h-16 rounded-xl border border-dashed border-sky-200 bg-sky-50/30 overflow-hidden flex items-center justify-center shrink-0 relative">
-                      {ptHn && ptHn !== "-" ? (
-                        <img
-                          src={`/uploads/patient/${ptHn}.webp?v=${ptHn}`}
-                          alt="Patient"
-                          className={`w-full h-full object-cover ${
-                            hospitalPt?.is_deceased ? "grayscale" : ""
-                          }`}
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                          }}
-                        />
-                      ) : (
-                        <User className="w-6 h-6 text-sky-300 stroke-1" />
-                      )}
-                      {hospitalPt?.is_deceased && (
+                    {/* รูปภาพผู้ป่วย[cite: 5] */}
+                    <div className="w-14 h-16 rounded-xl border border-sky-100 bg-zinc-50 overflow-hidden flex items-center justify-center shrink-0 relative shadow-2xs">
+                      <img
+                        src={
+                          item.patient_hn && item.patient_hn !== "-"
+                            ? `/uploads/patient/${item.patient_hn}.webp?v=${item.patient_hn}`
+                            : "/images/avatars/default.png"
+                        }
+                        alt="Patient Photo"
+                        className={`w-full h-full object-cover ${
+                          item.hospital_patient?.is_deceased || outcome?.includes("เสียชีวิต") || isCancelled
+                            ? "grayscale"
+                            : ""
+                        }`}
+                        onError={(e) => {
+                          e.currentTarget.src = "/images/avatars/default.png";
+                        }}
+                      />
+                      {(item.hospital_patient?.is_deceased || outcome?.includes("เสียชีวิต")) && !isCancelled && (
                         <div className="absolute inset-x-0 bottom-0 bg-red-600/90 text-white text-[8px] font-bold text-center py-0.5">
                           เสียชีวิต
                         </div>
@@ -431,18 +473,26 @@ export default function CasesPage() {
                         <span className="font-mono text-sm font-bold text-zinc-900 bg-zinc-100 px-2.5 py-0.5 rounded-lg border border-zinc-200/80">
                           {item.case_number}
                         </span>
-                        {renderTriageBadge(item.triage_level)}
+
+                        {/* 🌟 เงื่อนไขที่ 1: ถ้าไม่ถูกยกเลิก ให้แสดงป้าย Triage ปกติ */}
+                        {!isCancelled && renderTriageBadge(item.triage_level)}
+
+                        {/* 🌟 เงื่อนไขที่ 3: แสดงสถานะการยกเลิกให้ชัดเจน */}
                         {renderStatusBadge(item.status)}
+
                         <span className="text-xs text-zinc-400 flex items-center gap-1 ml-auto">
                           <Clock className="w-3.5 h-3.5" />
                           {formatThaiDateTime(item.created_at)}
                         </span>
                       </div>
 
+                      {/* ชื่อผู้ป่วยและ HN/ID ตามมาตรฐาน */}
                       <div className="text-xs font-bold text-zinc-800 flex items-center gap-1.5 truncate">
                         <User className="w-3.5 h-3.5 text-sky-600 shrink-0" />
                         <span className="truncate">ผู้ป่วย: {ptName}</span>
-                        <span className="text-zinc-400 font-normal font-mono">(HN: {ptHn || "-"})</span>
+                        <span className="text-zinc-400 font-normal font-mono text-[11px]">
+                          ({item.patient_source === "HOSPITAL" ? `HN: ${ptHnDisplay}` : ptHnDisplay})
+                        </span>
                       </div>
 
                       <p className="text-xs text-zinc-500 truncate flex items-center gap-1.5">
@@ -452,43 +502,60 @@ export default function CasesPage() {
                     </div>
                   </div>
 
-                  {/* ข้อมูลสรุป: สถานะสุดท้าย, รพ.ส่งต่อ, หัวหน้าชุด */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4 w-full lg:w-auto border-t lg:border-t-0 pt-3 lg:pt-0 border-zinc-100">
-                    {/* ข้อ 1 & 2: สถานะสุดท้าย / รพ. ปลายทาง */}
-                    <div className="text-xs space-y-1">
-                      <div className="flex items-center gap-1">
-                        <span className="text-zinc-400">สถานะ/ผลลัพธ์:</span>
-                        <span className="font-semibold text-zinc-800">
-                          {hospitalPt?.is_deceased ? (
-                            <span className="text-rose-600 font-bold flex items-center gap-1">
-                              <Skull className="w-3.5 h-3.5" /> เสียชีวิต
-                            </span>
-                          ) : (
-                            item.latest_treatment?.initial_outcome || "กำลังดำเนินการ"
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 text-sky-700 font-medium">
-                        <Building2 className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-                        <span className="truncate">
-                          ส่ง รพ.: {item.latest_treatment?.destination_hospital || "-"}
-                        </span>
+                  {/* 🌟 เงื่อนไขที่ 2 & 3: แยกการแสดงผลระหว่างเคสปกติ และเคสที่ถูกยกเลิก */}
+                  {isCancelled ? (
+                    /* ส่วนแสดงข้อมูลเฉพาะเคสที่ถูกยกเลิก (แสดงสาเหตุและหมายเหตุ) */
+                    <div className="w-full lg:w-80 border-t lg:border-t-0 pt-3 lg:pt-0 border-rose-100 flex flex-col justify-center">
+                      <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold text-rose-800">
+                          <FileX2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                          <span>สาเหตุการยกเลิก:</span>
+                          <span className="text-rose-900 font-medium">
+                            {item.cancellation_reason || "ไม่ได้ระบุสาเหตุ"}
+                          </span>
+                        </div>
+                        {item.cancellation_note && (
+                          <p className="text-[11px] text-rose-700/90 pl-5 truncate" title={item.cancellation_note}>
+                            หมายเหตุ: {item.cancellation_note}
+                          </p>
+                        )}
                       </div>
                     </div>
-
-                    {/* ข้อ 3: หัวหน้าชุดปฏิบัติการ */}
-                    <div className="text-xs space-y-1">
-                      <div className="flex items-center gap-1 text-zinc-400">
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>หัวหน้าชุด:</span>
+                  ) : (
+                    /* ส่วนแสดงข้อมูลเคสปกติ: สถานะ/ผลลัพธ์, ส่ง รพ., หัวหน้าชุด[cite: 5] */
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4 w-full lg:w-auto border-t lg:border-t-0 pt-3 lg:pt-0 border-zinc-100">
+                      <div className="text-xs space-y-1">
+                        <div className="flex items-center gap-1">
+                          <span className="text-zinc-400">สถานะ/ผลลัพธ์:</span>
+                          <span className="font-semibold text-zinc-800">
+                            {outcome?.includes("เสียชีวิต") ? (
+                              <span className="text-rose-600 font-bold flex items-center gap-1">
+                                <Skull className="w-3.5 h-3.5" /> เสียชีวิต
+                              </span>
+                            ) : (
+                              outcome
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-sky-700 font-medium">
+                          <Building2 className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                          <span className="truncate">ส่ง รพ.: {destHosp}</span>
+                        </div>
                       </div>
-                      <p className="font-semibold text-zinc-800 truncate">
-                        {item.latest_dispatch?.leader?.name || "ยังไม่ระบุหัวหน้าชุด"}
-                      </p>
-                    </div>
-                  </div>
 
-                  {/* ข้อ 4 & 5: ปุ่มดูสรุปเคส และปุ่ม สั่งการ / ดำเนินการ */}
+                      <div className="text-xs space-y-1">
+                        <div className="flex items-center gap-1 text-zinc-400">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>หัวหน้าชุด:</span>
+                        </div>
+                        <p className="font-semibold text-zinc-800 truncate">
+                          {leaderDisplay}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ปุ่มดูสรุปเคส และปุ่ม ดำเนินการ/รายละเอียด[cite: 5] */}
                   <div className="flex items-center justify-end gap-2 w-full lg:w-auto pt-2 lg:pt-0 border-t lg:border-t-0 border-zinc-100">
                     <Link
                       href={`/cases/${item.id}/summary`}
@@ -499,9 +566,13 @@ export default function CasesPage() {
 
                     <Link
                       href={`/cases/${item.id}`}
-                      className="flex-1 lg:flex-none px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-2xs"
+                      className={`flex-1 lg:flex-none px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 shadow-2xs ${
+                        isCancelled
+                          ? "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200"
+                          : "bg-zinc-900 hover:bg-zinc-800 text-white"
+                      }`}
                     >
-                      <span>สั่งการ / ดำเนินการ</span>
+                      <span>{isCancelled ? "ดูรายละเอียด" : "สั่งการ / ดำเนินการ"}</span>
                       <ChevronRight className="w-4 h-4" />
                     </Link>
                   </div>
@@ -509,7 +580,7 @@ export default function CasesPage() {
               );
             })}
 
-            {/* ระบบแบ่งหน้า (Pagination) */}
+            {/* ระบบแบ่งหน้า (Pagination)[cite: 5] */}
             <div className="flex flex-col sm:flex-row items-center justify-between pt-4 px-2 text-xs text-zinc-500 gap-2">
               <div>
                 แสดงทั้งหมด <span className="font-bold text-zinc-900">{totalCases}</span> เคส (หน้า {page} จาก {totalPages})
@@ -519,7 +590,7 @@ export default function CasesPage() {
                 <button
                   onClick={() => setPage((p) => Math.max(p - 1, 1))}
                   disabled={page <= 1}
-                  className="h-8 px-3 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                  className="h-8 px-3 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                   <span>ก่อนหน้า</span>
@@ -527,7 +598,7 @@ export default function CasesPage() {
                 <button
                   onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
                   disabled={page >= totalPages}
-                  className="h-8 px-3 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                  className="h-8 px-3 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
                 >
                   <span>ถัดไป</span>
                   <ChevronRight className="w-3.5 h-3.5" />

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET: ดึงข้อมูลรายละเอียดเคส ผู้ป่วย รถพยาบาล เจ้าหน้าที่ และประวัติ Dispatch
+// GET: ดึงรายละเอียดเคส, ข้อมูลผู้ป่วยตามเงื่อนไข, รถพยาบาล, เจ้าหน้าที่ และข้อมูล Dispatch เดิม
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> | { id: string } }
@@ -14,167 +14,111 @@ export async function GET(
       return NextResponse.json({ error: "รหัสเคสไม่ถูกต้อง" }, { status: 400 });
     }
 
-    // 1. ดึงข้อมูลเคส
-    const emsCase = await prisma.ems_cases.findUnique({
+    // 1. ดึงข้อมูลเคสพร้อม relation ems_patient (กรณีไม่ใช่ HOSPITAL)
+    const caseItem = await prisma.ems_cases.findUnique({
       where: { id: caseId },
       include: {
         ems_patient: true,
       },
     });
 
-    if (!emsCase) {
-      return NextResponse.json({ error: "ไม่พบข้อมูลเคสที่ระบุ" }, { status: 404 });
+    if (!caseItem) {
+      return NextResponse.json({ error: "ไม่พบข้อมูลเคส" }, { status: 404 });
     }
 
-    // 2. ดึงข้อมูล Dispatch ล่าสุด พร้อมรายชื่อเจ้าหน้าที่
-    let latestDispatch: any = null;
-    try {
-      latestDispatch = await prisma.ems_dispatches.findFirst({
-        where: { case_id: caseId },
-        include: {
-          staffs: true,
-        },
-        orderBy: { id: "desc" },
-      });
-    } catch (dispErr) {
-      console.error("Error reading ems_dispatches:", dispErr);
+    // 2. เงื่อนไขดึงข้อมูลจากตาราง patient เมื่อ patient_source === 'HOSPITAL'
+    let hospitalPatient = null;
+    if (caseItem.patient_source === "HOSPITAL" && caseItem.patient_hn) {
+      hospitalPatient = await prisma.patient.findUnique({
+        where: { hn: caseItem.patient_hn },
+      }).catch(() => null);
     }
 
-    // 3. ดึงข้อมูลผู้ป่วย รพ.
-    let hospitalPatient: any = null;
-    if (emsCase.patient_hn) {
-      try {
-        const pt = await prisma.patient.findFirst({
-          where: { hn: emsCase.patient_hn },
-        });
+    // 3. ดึงรายการรถพยาบาลที่พร้อมใช้งาน
+    const vehicles = await prisma.vehicles.findMany({
+      where: { status: "active" },
+    });
 
-        if (pt) {
-          let calculatedAge = null;
-          if (pt.birthday) {
-            const bDate = new Date(pt.birthday);
-            const today = new Date();
-            let age = today.getFullYear() - bDate.getFullYear();
-            const m = today.getMonth() - bDate.getMonth();
-            if (m < 0 || (m === 0 && today.getDate() < bDate.getDate())) age--;
-            calculatedAge = age >= 0 ? age : null;
-          }
+    // 4. ดึงรายชื่อเจ้าหน้าที่ทั้งหมด
+    const officers = await prisma.users.findMany({
+      where: { is_active: true },
+      select: { user_id: true, fullname: true, role: true },
+    });
 
-          hospitalPatient = {
-            hn: pt.hn,
-            name: `${pt.pname || ""}${pt.fname || ""} ${pt.lname || ""}`.trim(),
-            gender: pt.sex === "1" ? "ชาย" : pt.sex === "2" ? "หญิง" : "ไม่ระบุ",
-            age: calculatedAge !== null ? `${calculatedAge} ปี` : "-",
-            blood_group: (pt as any).bloodgrp?.trim() || (pt as any).bloodgroup?.trim() || "-",
-            phone: (pt as any).mobile_phone_number?.trim() || (pt as any).hometel?.trim() || "-",
-            address: (pt as any).address_full?.trim() || "-",
-            is_deceased: pt.death === "Y" || pt.death === "1",
-          };
-        }
-      } catch (err) {
-        console.error("Error fetching hospital patient:", err);
-      }
-    }
+    const formattedOfficers = officers.map((u) => ({
+      id: u.user_id,
+      name: u.fullname,
+      role: u.role,
+    }));
 
-    // 4. ดึงรายการรถพยาบาล
-    let availableVehicles: any[] = [];
-    try {
-      const rawVehicles: any[] = await prisma.$queryRaw`
-        SELECT vehicle_id, plate_number, vehicle_type, brand 
-        FROM vehicles 
-        ORDER BY vehicle_id ASC
-      `;
-      availableVehicles = rawVehicles.map((v) => ({
-        vehicle_id: Number(v.vehicle_id),
-        plate_number: v.plate_number || `รถรหัส ${v.vehicle_id}`,
-        brand: v.brand || "",
-        vehicle_type: v.vehicle_type || "",
-      }));
-    } catch (vErr) {
-      console.error("Error reading vehicles via queryRaw:", vErr);
-    }
+    // 5. ดึงข้อมูล Dispatch ล่าสุดและสมาชิกทีมปฏิบัติการ
+    const latestDispatch = await prisma.ems_dispatches.findFirst({
+      where: { case_id: caseId },
+      include: {
+        staffs: true,
+      },
+      orderBy: { id: "desc" },
+    });
 
-    // 5. ดึงเจ้าหน้าที่จากตาราง users
-    let emsOfficers: any[] = [];
-    try {
-      const uList = await prisma.users.findMany({
-        where: {
-          OR: [
-            { role: "ems" },
-            { role: "Supervisor" },
-            { role: "supervisor" },
-            { role: "EMS" },
-          ],
-        },
-        select: {
-          user_id: true,
-          fullname: true,
-          role: true,
-          phone: true,
-          username: true,
-        },
-        orderBy: { fullname: "asc" },
-      });
-
-      emsOfficers = uList.map((u: any) => ({
-        id: u.user_id,
-        name: u.fullname?.trim() || u.username || `เจ้าหน้าที่ ID #${u.user_id}`,
-        role: u.role,
-        phone: u.phone || "-",
-      }));
-    } catch (uErr) {
-      console.error("Error reading users:", uErr);
-    }
-
-    // แปลงข้อมูล staffs (อ่านบทบาทจาก note หรือ role เผื่อไว้ทั้งสองแบบ)
-    let formattedDispatch = null;
+    let dispatchInfo = null;
     if (latestDispatch) {
-      const leaderStaff = latestDispatch.staffs?.find(
-        (s: any) => s.note === "leader" || s.role === "leader"
-      );
-      const driverStaff = latestDispatch.staffs?.find(
-        (s: any) => s.note === "driver" || s.role === "driver"
-      );
-      const memberStaffs = latestDispatch.staffs?.filter(
-        (s: any) =>
-          s.note === "member" ||
-          s.role === "member" ||
-          (!s.note && !s.role) ||
-          (s.note !== "leader" && s.note !== "driver")
+      const staffList = latestDispatch.staffs || [];
+
+      // ตรวจสอบทั้ง role_type และ note เพื่อรองรับข้อมูลทุกรูปแบบ
+      const leaderRecord = staffList.find(
+        (s) =>
+          s.note?.toLowerCase() === "leader" ||
+          s.role_type?.toLowerCase() === "team_leader" ||
+          s.role_type?.toLowerCase() === "leader"
       );
 
-      formattedDispatch = {
+      const driverRecord = staffList.find(
+        (s) =>
+          s.note?.toLowerCase() === "driver" ||
+          s.role_type?.toLowerCase() === "driver"
+      );
+
+      // สมาชิกผู้ร่วมปฏิบัติการที่ไม่ใช่หัวหน้าชุดและคนขับ
+      const memberRecords = staffList
+        .filter((s) => {
+          const isLeader =
+            s.note?.toLowerCase() === "leader" ||
+            s.role_type?.toLowerCase() === "team_leader" ||
+            s.role_type?.toLowerCase() === "leader";
+          const isDriver =
+            s.note?.toLowerCase() === "driver" ||
+            s.role_type?.toLowerCase() === "driver";
+          return !isLeader && !isDriver;
+        })
+        .map((s) => s.user_id);
+
+      dispatchInfo = {
         id: latestDispatch.id,
         vehicle_id: latestDispatch.vehicle_id,
-        leader_id: leaderStaff ? leaderStaff.user_id : null,
-        driver_id: driverStaff ? driverStaff.user_id : null,
-        member_ids: memberStaffs ? memberStaffs.map((s: any) => s.user_id) : [],
+        leader_id: leaderRecord ? leaderRecord.user_id : null,
+        driver_id: driverRecord ? driverRecord.user_id : null,
+        member_ids: memberRecords,
       };
     }
 
-    const safeCase = {
-      ...emsCase,
-      latitude: emsCase.latitude ? Number(emsCase.latitude) : null,
-      longitude: emsCase.longitude ? Number(emsCase.longitude) : null,
-    };
-
     return NextResponse.json({
       success: true,
-      case: safeCase,
+      case: caseItem,
       hospital_patient: hospitalPatient,
-      vehicles: availableVehicles,
-      officers: emsOfficers,
-      latest_dispatch: formattedDispatch,
+      vehicles,
+      officers: formattedOfficers,
+      latest_dispatch: dispatchInfo,
     });
   } catch (error: any) {
-    console.error("Error in GET /api/cases/[id]:", error);
+    console.error("Error fetching case detail:", error);
     return NextResponse.json(
-      { error: error?.message || "เกิดข้อผิดพลาดในการดึงข้อมูลเคส" },
+      { error: error?.message || "เกิดข้อผิดพลาดในการดึงข้อมูล" },
       { status: 500 }
     );
   }
 }
 
-// PATCH: บันทึกข้อมูลเคส + Dispatch + เจ้าหน้าที่ (ใช้ note แทน role)
+// PATCH: บันทึกข้อมูลการสั่งการเคส หรือบันทึกการยกเลิกเคส
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> | { id: string } }
@@ -182,124 +126,100 @@ export async function PATCH(
   try {
     const resolvedParams = await context.params;
     const caseId = parseInt(resolvedParams.id, 10);
+
+    if (isNaN(caseId)) {
+      return NextResponse.json({ error: "รหัสเคสไม่ถูกต้อง" }, { status: 400 });
+    }
+
     const body = await request.json();
 
-    const {
-      status,
-      triage_level,
-      chief_complaint,
-      incident_address,
-      caller_name,
-      caller_phone,
-      vehicle_id,
-      leader_id,
-      driver_id,
-      member_ids,
-    } = body;
+    // 1. เตรียมข้อมูลสำหรับอัปเดต ems_cases
+    const updateData: any = {
+      status: body.status,
+    };
 
-    const parsedVehicleId = vehicle_id ? parseInt(String(vehicle_id), 10) : null;
-    const parsedLeaderId = leader_id ? parseInt(String(leader_id), 10) : null;
-    const parsedDriverId = driver_id ? parseInt(String(driver_id), 10) : null;
-    const parsedMemberIds = Array.isArray(member_ids)
-      ? member_ids.map((m: any) => parseInt(String(m), 10)).filter(Boolean)
-      : [];
+    if (body.triage_level !== undefined) updateData.triage_level = body.triage_level;
+    if (body.chief_complaint !== undefined) updateData.chief_complaint = body.chief_complaint;
+    if (body.incident_address !== undefined) updateData.incident_address = body.incident_address;
+    if (body.caller_name !== undefined) updateData.caller_name = body.caller_name;
+    if (body.caller_phone !== undefined) updateData.caller_phone = body.caller_phone;
 
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. อัปเดตข้อมูลในตาราง ems_cases
-      const updatedCase = await tx.ems_cases.update({
-        where: { id: caseId },
+    // รองรับข้อมูลการยกเลิกเคส
+    if (body.status === "cancelled") {
+      updateData.cancellation_reason = body.cancellation_reason || null;
+      updateData.cancellation_note = body.cancellation_note || null;
+      updateData.cancelled_at = body.cancelled_at ? new Date(body.cancelled_at) : new Date();
+    } else {
+      // หากเปลี่ยนกลับเป็นสถานะอื่นที่ไม่ใช่ยกเลิก ให้ล้างค่าการยกเลิกออก
+      if (body.cancellation_reason !== undefined) {
+        updateData.cancellation_reason = body.cancellation_reason;
+      }
+      if (body.cancellation_note !== undefined) {
+        updateData.cancellation_note = body.cancellation_note;
+      }
+    }
+
+    await prisma.ems_cases.update({
+      where: { id: caseId },
+      data: updateData,
+    });
+
+    // 2. บันทึกข้อมูล Dispatch เฉพาะเมื่อมีการระบุรถพยาบาลและไม่ใช่การกดยกเลิกเคสแบบไม่มีรถ
+    if (body.vehicle_id && body.status !== "cancelled") {
+      const dispatch = await prisma.ems_dispatches.create({
         data: {
-          status: status || "dispatched",
-          triage_level: triage_level || "yellow",
-          chief_complaint: chief_complaint || null,
-          incident_address: incident_address || "",
-          caller_name: caller_name || null,
-          caller_phone: caller_phone || null,
-          updated_at: new Date(),
+          case_id: caseId,
+          vehicle_id: parseInt(body.vehicle_id, 10),
+          time_dispatched: new Date(),
         },
       });
 
-      // 2. จัดการตาราง ems_dispatches
-      const existingDispatch = await tx.ems_dispatches.findFirst({
-        where: { case_id: caseId },
-        orderBy: { id: "desc" },
-      });
+      const staffData: any[] = [];
 
-      let dispatchId: number;
-
-      if (existingDispatch) {
-        dispatchId = existingDispatch.id;
-        await tx.ems_dispatches.update({
-          where: { id: dispatchId },
-          data: {
-            vehicle_id: parsedVehicleId,
-          },
-        });
-
-        // ล้างข้อมูล staffs เดิมของ dispatch นี้
-        await tx.ems_dispatch_staffs.deleteMany({
-          where: { dispatch_id: dispatchId },
-        });
-      } else {
-        const newDispatch = await tx.ems_dispatches.create({
-          data: {
-            case_id: caseId,
-            vehicle_id: parsedVehicleId,
-            time_dispatched: new Date(),
-          },
-        });
-        dispatchId = newDispatch.id;
-      }
-
-      // 3. เตรียมข้อมูลทีมเจ้าหน้าที่ โดยบันทึกบทบาทลงคอลัมน์ note
-      const staffData: { dispatch_id: number; user_id: number; note: string }[] = [];
-
-      if (parsedLeaderId) {
+      if (body.leader_id) {
         staffData.push({
-          dispatch_id: dispatchId,
-          user_id: parsedLeaderId,
+          dispatch_id: dispatch.id,
+          user_id: parseInt(body.leader_id, 10),
+          role_type: "assistant",
           note: "leader",
         });
       }
 
-      if (parsedDriverId) {
+      if (body.driver_id) {
         staffData.push({
-          dispatch_id: dispatchId,
-          user_id: parsedDriverId,
+          dispatch_id: dispatch.id,
+          user_id: parseInt(body.driver_id, 10),
+          role_type: "assistant",
           note: "driver",
         });
       }
 
-      parsedMemberIds.forEach((uid: number) => {
-        if (uid !== parsedLeaderId && uid !== parsedDriverId) {
+      if (Array.isArray(body.member_ids)) {
+        body.member_ids.forEach((mId: number) => {
           staffData.push({
-            dispatch_id: dispatchId,
-            user_id: uid,
+            dispatch_id: dispatch.id,
+            user_id: Number(mId),
+            role_type: "assistant",
             note: "member",
           });
-        }
-      });
-
-      // 4. บันทึกลง ems_dispatch_staffs
-      if (staffData.length > 0) {
-        await tx.ems_dispatch_staffs.createMany({
-          data: staffData,
         });
       }
 
-      return { updatedCase, dispatchId };
-    });
+      if (staffData.length > 0) {
+        await prisma.ems_dispatch_staffs.createMany({
+          data: staffData,
+        });
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      message: "บันทึกข้อมูลการสั่งการและทีมปฏิบัติการเรียบร้อยแล้ว",
-      case: result.updatedCase,
-      dispatch_id: result.dispatchId,
+      message: body.status === "cancelled" ? "บันทึกการยกเลิกเคสสำเร็จ" : "บันทึกการสั่งการสำเร็จ",
     });
   } catch (error: any) {
-    console.error("CRITICAL ERROR in PATCH /api/cases/[id]:", error);
+    console.error("Error updating case:", error);
     return NextResponse.json(
-      { error: error?.message || "เกิดข้อผิดพลาดในการอัปเดตข้อมูลเคส" },
+      { error: error?.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล" },
       { status: 500 }
     );
   }
