@@ -27,10 +27,11 @@ export const config = {
     /*
      * ตรวจทุกเส้นทาง ยกเว้น:
      * - api routes (ให้ api จัดการสิทธิ์แยกต่างหาก)
+     * - uploads (ให้ secure route handler ใน src/app/uploads จัดการสิทธิ์รูปภาพ)
      * - _next/static (ไฟล์ static ของ Next.js)
      * - _next/image (ระบบจัดการรูปภาพ)
      * - favicon.ico, icon.png หรือรูปใน public/images
      */
-    "/((?!api|_next/static|_next/image|images|favicon.ico|icon.png).*)",
+    "/((?!api|uploads|_next/static|_next/image|images|favicon.ico|icon.png).*)",
   ],
 };
