@@ -78,7 +78,7 @@ model users {
   role       String    @db.VarChar(30)
   created_at DateTime? @db.DateTime(0)
   avatars    String?   @db.VarChar(200)
-  img        Bytes     @db.MediumBlob
+  img        Bytes?    @db.MediumBlob
   treatments_recorded ems_treatments[]
   attachments_uploaded ems_case_attachments[]
 }
