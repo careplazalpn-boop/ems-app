@@ -41,9 +41,18 @@ export async function GET(
 
     // 4. ดึงรายชื่อเจ้าหน้าที่ทั้งหมด
     const officers = await prisma.users.findMany({
-      where: { is_active: true },
-      select: { user_id: true, fullname: true, role: true },
-    });
+      where: {
+          role: {
+            in: ["ems", "Supervisor","Admin"],
+          },
+        },
+        select: {
+          user_id: true,
+          fullname: true,
+          role: true,
+        },
+        orderBy: { fullname: "asc" },
+      });
 
     const formattedOfficers = officers.map((u) => ({
       id: u.user_id,

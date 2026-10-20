@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// ==========================================
+// 1. GET /api/cases (คง Logic เดิมทั้งหมด 100%)
+// ==========================================
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -12,25 +15,21 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-// 1. สร้างเงื่อนไขตัวกรอง (Where Clause)
+    // 1. สร้างเงื่อนไขตัวกรอง (Where Clause)
     const where: any = {};
 
-    // 🌟 จัดการเงื่อนไข Status
+    // จัดการเงื่อนไข Status
     if (status === "cancelled") {
-      // ดึงเฉพาะเคสที่ยกเลิก
       where.status = "cancelled";
     } else if (status !== "all") {
-      // ดึงตามสถานะที่ระบุ (เช่น pending, dispatched, completed)
       where.status = status;
     } else {
-      // กรณี status === "all"
-      // ถ้ามีการเลือกกรองตามระดับความรุนแรง (Triage) ให้แสดงเฉพาะเคสที่ไม่ถูกยกเลิก
       if (triage !== "all") {
         where.status = { not: "cancelled" };
       }
     }
 
-    // 🌟 จัดการเงื่อนไข Triage (ความรุนแรง)
+    // จัดการเงื่อนไข Triage (ความรุนแรง)
     if (triage !== "all") {
       where.triage_level = triage;
     }
@@ -45,9 +44,8 @@ export async function GET(request: NextRequest) {
         { incident_address: { contains: search } },
       ];
     }
-    
 
-    // 2. 🌟 นับสถิติสรุปภาพรวม (KPI Summary) แยกตามระดับความรุนแรง ไม่รวมเคสยกเลิก
+    // 2. นับสถิติสรุปภาพรวม (KPI Summary)
     const [
       totalActive,
       redCount,
@@ -58,33 +56,25 @@ export async function GET(request: NextRequest) {
       totalMatchingCases,
       cases,
     ] = await Promise.all([
-      // เคสทั้งหมดที่ไม่ถูกยกเลิก
       prisma.ems_cases.count({
         where: { status: { not: "cancelled" } },
       }),
-      // วิกฤต (Red) ไม่รวมยกเลิก
       prisma.ems_cases.count({
         where: { status: { not: "cancelled" }, triage_level: "red" },
       }),
-      // เร่งด่วน (Yellow) ไม่รวมยกเลิก
       prisma.ems_cases.count({
         where: { status: { not: "cancelled" }, triage_level: "yellow" },
       }),
-      // ไม่เร่งด่วน (Green) ไม่รวมยกเลิก
       prisma.ems_cases.count({
         where: { status: { not: "cancelled" }, triage_level: "green" },
       }),
-      // ทั่วไป (White) ไม่รวมยกเลิก
       prisma.ems_cases.count({
         where: { status: { not: "cancelled" }, triage_level: "white" },
       }),
-      // เคสที่ถูกยกเลิกทั้งหมด
       prisma.ems_cases.count({
         where: { status: "cancelled" },
       }),
-      // จำนวนเคสทั้งหมดที่ตรงกับตัวกรองค้นหา (สำหรับ Pagination)
       prisma.ems_cases.count({ where }),
-      // ดึงรายการเคสตามเงื่อนไข
       prisma.ems_cases.findMany({
         where,
         skip,
@@ -112,16 +102,17 @@ export async function GET(request: NextRequest) {
       .filter((c) => c.patient_source === "HOSPITAL" && c.patient_hn)
       .map((c) => c.patient_hn as string);
 
-    const hospitalPatients = hospitalHns.length > 0
-      ? await prisma.patient.findMany({
-          where: { hn: { in: hospitalHns } },
-          select: { hn: true, pname: true, fname: true, lname: true },
-        })
-      : [];
+    const hospitalPatients =
+      hospitalHns.length > 0
+        ? await prisma.patient.findMany({
+            where: { hn: { in: hospitalHns } },
+            select: { hn: true, pname: true, fname: true, lname: true },
+          })
+        : [];
 
     const hospitalPtMap = new Map(hospitalPatients.map((p) => [p.hn, p]));
 
-    // 4. รวบรวม User ID หัวหน้าชุด (หาทั้งจาก note: "leader" และ role_type: "team_leader")
+    // 4. รวบรวม User ID หัวหน้าชุด
     const leaderUserIds: number[] = [];
     cases.forEach((c) => {
       const latestDisp = c.dispatches[0];
@@ -136,12 +127,13 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    const leaders = leaderUserIds.length > 0
-      ? await prisma.users.findMany({
-          where: { user_id: { in: leaderUserIds } },
-          select: { user_id: true, fullname: true },
-        })
-      : [];
+    const leaders =
+      leaderUserIds.length > 0
+        ? await prisma.users.findMany({
+            where: { user_id: { in: leaderUserIds } },
+            select: { user_id: true, fullname: true },
+          })
+        : [];
 
     const leaderMap = new Map(leaders.map((u) => [u.user_id, u.fullname]));
 
@@ -214,6 +206,73 @@ export async function GET(request: NextRequest) {
     console.error("Error fetching cases list:", error);
     return NextResponse.json(
       { error: error?.message || "เกิดข้อผิดพลาดในการดึงรายการเคส" },
+      { status: 500 }
+    );
+  }
+}
+
+// ==========================================
+// 2. POST /api/cases (สำหรับสร้างเคสใหม่)
+// ==========================================
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+
+    // 1. สร้างเลขเคสอัตโนมัติหากไม่ได้ส่งมา
+    let caseNumber = body.case_number;
+    if (!caseNumber) {
+      const today = new Date();
+      const dateStr = today.toISOString().slice(0, 10).replace(/-/g, "");
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      caseNumber = `EMS-${dateStr}-${randomSuffix}`;
+    }
+
+    // 2. แปลงพิกัด (รองรับทั้ง latitude และ incident_latitude)
+    const latRaw = body.latitude !== undefined ? body.latitude : body.incident_latitude;
+    const lngRaw = body.longitude !== undefined ? body.longitude : body.incident_longitude;
+    const latitude = latRaw !== null && latRaw !== "" && latRaw !== undefined ? parseFloat(latRaw) : null;
+    const longitude = lngRaw !== null && lngRaw !== "" && lngRaw !== undefined ? parseFloat(lngRaw) : null;
+
+    // 3. บันทึกลงตาราง ems_cases (ไม่ส่ง user_id เนื่องจากไม่มีใน Schema)
+    const newCase = await prisma.ems_cases.create({
+      data: {
+        case_number: caseNumber,
+        caller_name: body.caller_name || null,
+        caller_phone: body.caller_phone || null,
+        incident_address: body.incident_address || "ไม่ระบุที่อยู่เกิดเหตุ",
+        latitude: latitude,
+        longitude: longitude,
+        triage_level: body.triage_level || "white",
+        status: body.status || "pending",
+        patient_source: body.patient_source || "EMS",
+        patient_hn: body.patient_hn || null,
+        chief_complaint: body.chief_complaint || null,
+        insurance_type: body.insurance_type || null,
+        insurance_code: body.insurance_code || null,
+        insurance_hosp_code: body.insurance_hosp_code || null,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+    });
+
+    // 🌟 คืนค่าแบบ Flat + Nested data เพื่อให้ฝั่ง Frontend ทุกแบบอ่านค่าได้ทันที
+    return NextResponse.json(
+      {
+        ...newCase,
+        id: newCase.id,
+        case_id: newCase.id,
+        success: true,
+        data: newCase,
+      },
+      { status: 201 }
+    );
+  } catch (error: any) {
+    console.error("Error creating EMS case:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error?.message || "เกิดข้อผิดพลาดในการสร้างเคสใหม่",
+      },
       { status: 500 }
     );
   }

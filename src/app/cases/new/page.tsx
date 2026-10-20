@@ -234,14 +234,17 @@ function NewCaseFormContent() {
       });
       const data = await res.json();
 
-      if (res.ok) {
-        alert(`บันทึกเคสฉุกเฉินสำเร็จ! เลขที่ใบงาน: ${data.case.case_number}`);
+      if (res.ok && (data.success || data.id || data.case_number)) {
+        // ดึงเลขที่ใบงานอย่างปลอดภัย รองรับ data.case_number, data.case?.case_number หรือ data.data?.case_number
+        const caseNo = data.case_number || data.case?.case_number || data.data?.case_number || "EMS";
+        alert(`บันทึกเคสฉุกเฉินสำเร็จ! เลขที่ใบงาน: ${caseNo}`);
         router.push("/cases");
       } else {
-        alert(data.error || "เกิดข้อผิดพลาดในการบันทึก");
+        alert(data.error || data.message || "เกิดข้อผิดพลาดในการบันทึก");
       }
-    } catch (err) {
-      alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+    } catch (err: any) {
+      console.error("Save case error:", err);
+      alert(err?.message || "เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์");
     } finally {
       setSubmitting(false);
     }
