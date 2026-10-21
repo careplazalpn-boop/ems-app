@@ -1,24 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// ==========================================
-// 1. GET /api/cases (คง Logic เดิมทั้งหมด 100%)
-// ==========================================
+// ========================================================
+// 1. GET /api/cases (ดึงรายการเคส, ตัวกรอง, สถิติ, แบ่งหน้า)
+// ========================================================
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "12", 10);
+    const limit = parseInt(searchParams.get("limit") || "10", 10);
     const search = searchParams.get("search")?.trim() || "";
     const status = searchParams.get("status") || "all";
     const triage = searchParams.get("triage") || "all";
 
     const skip = (page - 1) * limit;
 
-    // 1. สร้างเงื่อนไขตัวกรอง (Where Clause)
+    // 1.1 สร้างเงื่อนไขตัวกรอง (Where Clause)
     const where: any = {};
 
-    // จัดการเงื่อนไข Status
     if (status === "cancelled") {
       where.status = "cancelled";
     } else if (status !== "all") {
@@ -29,12 +28,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // จัดการเงื่อนไข Triage (ความรุนแรง)
     if (triage !== "all") {
       where.triage_level = triage;
     }
 
-    // จัดการเงื่อนไขคำค้นหา (Search)
     if (search) {
       where.OR = [
         { case_number: { contains: search } },
@@ -45,7 +42,7 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // 2. นับสถิติสรุปภาพรวม (KPI Summary)
+    // 1.2 นับสถิติสรุปภาพรวม (KPI Cards) และดึงข้อมูลเคส
     const [
       totalActive,
       redCount,
@@ -79,9 +76,13 @@ export async function GET(request: NextRequest) {
         where,
         skip,
         take: limit,
-        orderBy: { created_at: "desc" },
+        orderBy: [{ created_at: "desc" }, { id: "desc" }],
         include: {
           ems_patient: true,
+          attachments: {
+            take: 1,
+            orderBy: { id: "desc" },
+          },
           treatments: {
             orderBy: { id: "desc" },
             take: 1,
@@ -97,22 +98,45 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // 3. รวบรวม HN สำหรับดึงชื่อผู้ป่วยจากตาราง patient
-    const hospitalHns = cases
-      .filter((c) => c.patient_source === "HOSPITAL" && c.patient_hn)
-      .map((c) => c.patient_hn as string);
+    // 1.3 รวบรวม HN ทั้งหมดที่มีเพื่อนำไปค้นหาในตาราง patient
+    const rawHns = cases
+      .map((c) => c.patient_hn?.trim())
+      .filter((hn): hn is string => Boolean(hn && hn !== "-"));
+
+    const searchHns = Array.from(
+      new Set(
+        rawHns.flatMap((hn) => [
+          hn,
+          hn.padStart(9, "0"),
+          hn.padStart(7, "0"),
+          String(parseInt(hn, 10)),
+        ])
+      )
+    );
 
     const hospitalPatients =
-      hospitalHns.length > 0
+      searchHns.length > 0
         ? await prisma.patient.findMany({
-            where: { hn: { in: hospitalHns } },
-            select: { hn: true, pname: true, fname: true, lname: true },
+            where: {
+              hn: { in: searchHns },
+            },
+            select: {
+              hn: true,
+              pname: true,
+              fname: true,
+              lname: true,
+            },
           })
         : [];
 
-    const hospitalPtMap = new Map(hospitalPatients.map((p) => [p.hn, p]));
+    const hospitalPtMap = new Map<string, any>();
+    hospitalPatients.forEach((p) => {
+      const cleanHn = p.hn.trim();
+      hospitalPtMap.set(cleanHn, p);
+      hospitalPtMap.set(String(parseInt(cleanHn, 10)), p);
+    });
 
-    // 4. รวบรวม User ID หัวหน้าชุด
+    // 1.4 รวบรวมข้อมูลหัวหน้าชุดปฏิบัติการ
     const leaderUserIds: number[] = [];
     cases.forEach((c) => {
       const latestDisp = c.dispatches[0];
@@ -137,23 +161,32 @@ export async function GET(request: NextRequest) {
 
     const leaderMap = new Map(leaders.map((u) => [u.user_id, u.fullname]));
 
-    // 5. จัดรูปแบบข้อมูลเคส (formattedCases)
+    // 1.5 ประกอบข้อมูลเคส (formattedCases)
     const formattedCases = cases.map((c) => {
-      let resolvedName = "ไม่ระบุชื่อ / นิรนาม";
-      let resolvedHn = "-";
+      let resolvedName = "";
+      let resolvedHn = c.patient_hn || "-";
+      const currentHn = c.patient_hn ? c.patient_hn.trim() : "";
 
-      if (c.patient_source === "HOSPITAL") {
-        const hp = c.patient_hn ? hospitalPtMap.get(c.patient_hn) : null;
+      if (currentHn) {
+        const hp = hospitalPtMap.get(currentHn) || hospitalPtMap.get(String(parseInt(currentHn, 10)));
         if (hp) {
           resolvedName = `${hp.pname || ""}${hp.fname || ""} ${hp.lname || ""}`.trim();
+          resolvedHn = hp.hn;
         }
-        resolvedHn = c.patient_hn || "-";
-      } else {
+      }
+
+      if (!resolvedName && c.ems_patient) {
         const ep = c.ems_patient;
-        if (ep) {
-          resolvedName = `${ep.pname || ""}${ep.fname || ""} ${ep.lname || ""}`.trim();
-          resolvedHn = ep.id ? `ID: ${ep.id}` : "-";
-        }
+        resolvedName = `${ep.pname || ""}${ep.fname || ""} ${ep.lname || ""}`.trim();
+        resolvedHn = ep.id ? `ID: ${ep.id}` : resolvedHn;
+      }
+
+      if (!resolvedName && c.caller_name) {
+        resolvedName = c.caller_name;
+      }
+
+      if (!resolvedName) {
+        resolvedName = "ไม่ระบุชื่อ / นิรนาม";
       }
 
       const latestTreatment = c.treatments[0] || null;
@@ -174,6 +207,9 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      const fallbackImage =
+        c.attachments && c.attachments.length > 0 ? c.attachments[0].file_path : null;
+
       return {
         ...c,
         resolved_patient_name: resolvedName,
@@ -181,6 +217,7 @@ export async function GET(request: NextRequest) {
         initial_outcome: initialOutcome,
         destination_hospital: destinationHospital,
         leader_name: leaderName,
+        case_image: fallbackImage,
       };
     });
 
@@ -211,14 +248,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ==========================================
-// 2. POST /api/cases (สำหรับสร้างเคสใหม่)
-// ==========================================
+// ========================================================
+// 2. POST /api/cases (สำหรับสร้างและบันทึกเคสใหม่)
+// ========================================================
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // 1. สร้างเลขเคสอัตโนมัติหากไม่ได้ส่งมา
+    // 2.1 สร้างรหัสเคสอัตโนมัติหากไม่ได้ส่งมา
     let caseNumber = body.case_number;
     if (!caseNumber) {
       const today = new Date();
@@ -227,13 +264,19 @@ export async function POST(request: NextRequest) {
       caseNumber = `EMS-${dateStr}-${randomSuffix}`;
     }
 
-    // 2. แปลงพิกัด (รองรับทั้ง latitude และ incident_latitude)
+    // 2.2 แปลงค่าพิกัดให้เป็น Float อย่างปลอดภัย
     const latRaw = body.latitude !== undefined ? body.latitude : body.incident_latitude;
     const lngRaw = body.longitude !== undefined ? body.longitude : body.incident_longitude;
-    const latitude = latRaw !== null && latRaw !== "" && latRaw !== undefined ? parseFloat(latRaw) : null;
-    const longitude = lngRaw !== null && lngRaw !== "" && lngRaw !== undefined ? parseFloat(lngRaw) : null;
+    const latitude =
+      latRaw !== null && latRaw !== "" && latRaw !== undefined ? parseFloat(latRaw) : null;
+    const longitude =
+      lngRaw !== null && lngRaw !== "" && lngRaw !== undefined ? parseFloat(lngRaw) : null;
 
-    // 3. บันทึกลงตาราง ems_cases (ไม่ส่ง user_id เนื่องจากไม่มีใน Schema)
+    // 2.3 ดึงค่า HN และ EMS Patient ID (รองรับทั้ง body.patient_hn และ body.hn)
+    const resolvedHn = (body.patient_hn || body.hn || "").trim() || null;
+    const emsPtId = body.ems_patient_id ? parseInt(body.ems_patient_id, 10) : null;
+
+    // 2.4 บันทึกลงตาราง ems_cases (ไม่ส่ง user_id เนื่องจากไม่มีใน Schema)
     const newCase = await prisma.ems_cases.create({
       data: {
         case_number: caseNumber,
@@ -244,8 +287,9 @@ export async function POST(request: NextRequest) {
         longitude: longitude,
         triage_level: body.triage_level || "white",
         status: body.status || "pending",
-        patient_source: body.patient_source || "EMS",
-        patient_hn: body.patient_hn || null,
+        patient_source: body.patient_source || (resolvedHn ? "HOSPITAL" : "EMS"),
+        patient_hn: resolvedHn,
+        ems_patient_id: emsPtId,
         chief_complaint: body.chief_complaint || null,
         insurance_type: body.insurance_type || null,
         insurance_code: body.insurance_code || null,
@@ -255,13 +299,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 🌟 คืนค่าแบบ Flat + Nested data เพื่อให้ฝั่ง Frontend ทุกแบบอ่านค่าได้ทันที
+    // 2.5 ส่งคืน Response ครอบคลุมทั้งแบบ Flat, .data และ .case
     return NextResponse.json(
       {
         ...newCase,
         id: newCase.id,
         case_id: newCase.id,
+        case_number: newCase.case_number,
         success: true,
+        case: newCase,
         data: newCase,
       },
       { status: 201 }

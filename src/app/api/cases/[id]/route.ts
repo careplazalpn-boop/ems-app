@@ -43,7 +43,7 @@ export async function GET(
     const officers = await prisma.users.findMany({
       where: {
           role: {
-            in: ["ems", "Supervisor","Admin"],
+            in: ["ems", "Supervisor",""],
           },
         },
         select: {

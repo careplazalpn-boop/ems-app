@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   XCircle,
   FileX2,
+  ExternalLink,
 } from "lucide-react";
 
 export default function CasesPage() {
@@ -41,16 +42,18 @@ export default function CasesPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [triageFilter, setTriageFilter] = useState("all");
   const [page, setPage] = useState(1);
+  // 🌟 ปรับขนาดหน้า เลือกได้ 10, 20, 30, 50, 100 (เริ่มต้น 10)
+  const [limit, setLimit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCases, setTotalCases] = useState(0);
 
-  // ดึงข้อมูลเคสจาก API[cite: 5]
+  // ดึงข้อมูลเคสจาก API
   const fetchCases = useCallback(async () => {
     setLoading(true);
     try {
       const query = new URLSearchParams({
         page: String(page),
-        limit: "12",
+        limit: String(limit),
         search: search.trim(),
         status: statusFilter,
         triage: triageFilter,
@@ -63,8 +66,8 @@ export default function CasesPage() {
         setCases(data.cases || []);
         if (data.summary) setSummary(data.summary);
         if (data.pagination) {
-          setTotalPages(data.pagination.totalPages);
-          setTotalCases(data.pagination.total);
+          setTotalPages(data.pagination.totalPages || 1);
+          setTotalCases(data.pagination.total || 0);
         }
       }
     } catch (err) {
@@ -72,13 +75,13 @@ export default function CasesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, triageFilter]);
+  }, [page, limit, search, statusFilter, triageFilter]);
 
   useEffect(() => {
     fetchCases();
   }, [fetchCases]);
 
-  // ฟังก์ชันแปลงรูปแบบวันที่/เวลาไทย[cite: 5]
+  // ฟังก์ชันแปลงรูปแบบวันที่/เวลาไทย
   const formatThaiDateTime = (dateString: string) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
@@ -88,7 +91,7 @@ export default function CasesPage() {
     }).format(date);
   };
 
-  // Badge แสดงระดับความรุนแรง (Triage)[cite: 5]
+  // Badge แสดงระดับความรุนแรง (Triage)
   const renderTriageBadge = (level: string) => {
     switch (level?.toLowerCase()) {
       case "red":
@@ -119,7 +122,7 @@ export default function CasesPage() {
     }
   };
 
-  // Badge แสดงสถานะเคส (Status)[cite: 5]
+  // Badge แสดงสถานะเคส (Status)
   const renderStatusBadge = (status: string) => {
     switch (status) {
       case "pending":
@@ -165,7 +168,7 @@ export default function CasesPage() {
   return (
     <AppLayout>
       <div className="w-full space-y-6 pb-12">
-        {/* Header ส่วนหัวของหน้า[cite: 5] */}
+        {/* Header ส่วนหัวของหน้า */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-zinc-200/80 shadow-xs">
           <div className="flex items-center gap-3.5">
             <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white flex items-center justify-center shadow-md shadow-rose-500/20">
@@ -206,9 +209,9 @@ export default function CasesPage() {
             </Link>
           </div>
         </div>
+
         {/* 1. สรุปภาพรวมเคสตามระดับความรุนแรงและเคสยกเลิก */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {/* การ์ด 1: เคสทั้งหมด (เฉพาะที่ปฏิบัติการ ไม่รวมยกเลิก) */}
           <div
             onClick={() => {
               setStatusFilter("all");
@@ -225,7 +228,6 @@ export default function CasesPage() {
             <div className="text-2xl font-black mt-1">{summary.total}</div>
           </div>
 
-          {/* การ์ด 2: วิกฤต (Red) */}
           <div
             onClick={() => {
               setStatusFilter("all");
@@ -245,7 +247,6 @@ export default function CasesPage() {
             <div className="text-2xl font-black mt-1">{summary.red}</div>
           </div>
 
-          {/* การ์ด 3: เร่งด่วน (Yellow) */}
           <div
             onClick={() => {
               setStatusFilter("all");
@@ -265,7 +266,6 @@ export default function CasesPage() {
             <div className="text-2xl font-black mt-1">{summary.yellow}</div>
           </div>
 
-          {/* การ์ด 4: ไม่เร่งด่วน (Green) */}
           <div
             onClick={() => {
               setStatusFilter("all");
@@ -285,7 +285,6 @@ export default function CasesPage() {
             <div className="text-2xl font-black mt-1">{summary.green}</div>
           </div>
 
-          {/* การ์ด 5: ทั่วไป (White) */}
           <div
             onClick={() => {
               setStatusFilter("all");
@@ -305,7 +304,6 @@ export default function CasesPage() {
             <div className="text-2xl font-black mt-1">{summary.white}</div>
           </div>
 
-          {/* การ์ด 6: ยกเลิกเคส */}
           <div
             onClick={() => {
               setTriageFilter("all");
@@ -326,7 +324,7 @@ export default function CasesPage() {
           </div>
         </div>
 
-        {/* 2. ส่วนแถบค้นหาและตัวกรองข้อมูล[cite: 5] */}
+        {/* 2. แถบค้นหาและตัวกรองข้อมูล */}
         <Card className="rounded-2xl border-zinc-200/80 shadow-xs bg-white">
           <CardContent className="p-4 sm:p-5">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -373,12 +371,29 @@ export default function CasesPage() {
                   <option value="green">ไม่เร่งด่วน (Green)</option>
                   <option value="white">ทั่วไป (White)</option>
                 </select>
+
+                {/* 🌟 ตัวเลือกจำนวนแถวต่อหน้า */}
+                <select
+                  value={limit}
+                  onChange={(e) => {
+                    setLimit(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="h-10 px-3 rounded-xl border border-zinc-200 bg-zinc-50 font-semibold text-xs text-zinc-800 focus:outline-none focus:border-red-400 cursor-pointer"
+                  title="เลือกจำนวนแสดงผลต่อหน้า"
+                >
+                  <option value={10}>10 รายการ</option>
+                  <option value={20}>20 รายการ</option>
+                  <option value={30}>30 รายการ</option>
+                  <option value={50}>50 รายการ</option>
+                  <option value={100}>100 รายการ</option>
+                </select>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* 3. รายการเคส[cite: 5] */}
+        {/* 3. รายการเคส */}
         {loading ? (
           <div className="py-20 text-center space-y-3">
             <RefreshCw className="w-8 h-8 text-rose-500 animate-spin mx-auto stroke-1" />
@@ -404,21 +419,34 @@ export default function CasesPage() {
             {cases.map((item) => {
               const isCancelled = item.status === "cancelled";
 
-              // 1. จัดการชื่อผู้ป่วย
+              // 1. จัดการชื่อผู้ป่วย (ดึงชื่อที่ resolve มาจาก patient หรือ ems_patient)
               const ptName =
                 item.resolved_patient_name ||
                 item.hospital_patient?.name ||
                 (item.ems_patient
                   ? `${item.ems_patient.pname || ""}${item.ems_patient.fname || ""} ${item.ems_patient.lname || ""}`.trim()
-                  : "ไม่ระบุชื่อ / นิรนาม");
+                  : item.caller_name || "ไม่ระบุชื่อ / นิรนาม");
 
               // 2. จัดการ HN / ID
               const ptHnDisplay =
-                item.patient_source === "HOSPITAL"
-                  ? item.resolved_hn || item.patient_hn || "-"
-                  : item.resolved_hn || (item.ems_patient_id ? `ID: ${item.ems_patient_id}` : "-");
+                item.resolved_hn && item.resolved_hn !== "-"
+                  ? item.resolved_hn
+                  : item.patient_hn || (item.ems_patient_id ? `ID: ${item.ems_patient_id}` : "-");
 
-              // 3. จัดการสถานะการรักษา และ รพ. ปลายทาง
+              // 3. จัดการรูปภาพ (HN รพ. -> รูปแนบในเคส -> default avatar)
+              const patientImgSrc =
+                item.patient_hn && item.patient_hn !== "-"
+                  ? `/uploads/patient/${item.patient_hn}.webp?v=${item.patient_hn}`
+                  : item.case_image || "/images/avatars/default.png";
+
+              // 4. ตรวจสอบพิกัดแผนที่สำหรับเปิด Google Maps
+              const hasCoordinates = Boolean(
+                item.latitude &&
+                item.longitude &&
+                parseFloat(String(item.latitude)) !== 0 &&
+                parseFloat(String(item.longitude)) !== 0
+              );
+
               const latestTreatment = item.treatments?.[0];
               const outcome =
                 item.initial_outcome ||
@@ -429,7 +457,6 @@ export default function CasesPage() {
                 latestTreatment?.destination_hospital ||
                 "-";
 
-              // 4. จัดการชื่อหัวหน้าชุด
               const leaderDisplay = item.leader_name || "ยังไม่ระบุหัวหน้าชุด";
 
               return (
@@ -441,16 +468,11 @@ export default function CasesPage() {
                       : "bg-white border-zinc-200/80 hover:border-zinc-300 hover:shadow-xs"
                   }`}
                 >
-                  {/* ข้อมูลรูปภาพผู้ป่วย & ข้อมูลเคสหลัก */}
                   <div className="flex items-start gap-4 flex-1 min-w-0">
-                    {/* รูปภาพผู้ป่วย[cite: 5] */}
+                    {/* รูปภาพผู้ป่วย */}
                     <div className="w-14 h-16 rounded-xl border border-sky-100 bg-zinc-50 overflow-hidden flex items-center justify-center shrink-0 relative shadow-2xs">
                       <img
-                        src={
-                          item.patient_hn && item.patient_hn !== "-"
-                            ? `/uploads/patient/${item.patient_hn}.webp?v=${item.patient_hn}`
-                            : "/images/avatars/default.png"
-                        }
+                        src={patientImgSrc}
                         alt="Patient Photo"
                         className={`w-full h-full object-cover ${
                           item.hospital_patient?.is_deceased || outcome?.includes("เสียชีวิต") || isCancelled
@@ -474,10 +496,7 @@ export default function CasesPage() {
                           {item.case_number}
                         </span>
 
-                        {/* 🌟 เงื่อนไขที่ 1: ถ้าไม่ถูกยกเลิก ให้แสดงป้าย Triage ปกติ */}
                         {!isCancelled && renderTriageBadge(item.triage_level)}
-
-                        {/* 🌟 เงื่อนไขที่ 3: แสดงสถานะการยกเลิกให้ชัดเจน */}
                         {renderStatusBadge(item.status)}
 
                         <span className="text-xs text-zinc-400 flex items-center gap-1 ml-auto">
@@ -486,7 +505,7 @@ export default function CasesPage() {
                         </span>
                       </div>
 
-                      {/* ชื่อผู้ป่วยและ HN/ID ตามมาตรฐาน */}
+                      {/* ชื่อผู้ป่วยและ HN/ID */}
                       <div className="text-xs font-bold text-zinc-800 flex items-center gap-1.5 truncate">
                         <User className="w-3.5 h-3.5 text-sky-600 shrink-0" />
                         <span className="truncate">ผู้ป่วย: {ptName}</span>
@@ -495,16 +514,32 @@ export default function CasesPage() {
                         </span>
                       </div>
 
-                      <p className="text-xs text-zinc-500 truncate flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                        <span className="truncate">{item.incident_address || "ไม่ระบุสถานที่เกิดเหตุ"}</span>
-                      </p>
+                      {/* สถานที่เกิดเหตุ + ปุ่มไอคอน Google Maps */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs text-zinc-500 truncate flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                          <span className="truncate">{item.incident_address || "ไม่ระบุสถานที่เกิดเหตุ"}</span>
+                        </p>
+
+                        {/* ไอคอนนำทาง Google Maps สำหรับเปิดดูภายนอก */}
+                        {hasCoordinates && (
+                          <a
+                            href={`https://www.google.com/maps?q=${item.latitude},${item.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 text-[11px] font-semibold transition shrink-0"
+                            title="เปิด Google Maps นำทาง"
+                          >
+                            <MapPin className="w-3 h-3 text-emerald-600" />
+                            <span>แผนที่</span>
+                            <ExternalLink className="w-2.5 h-2.5 text-emerald-500" />
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* 🌟 เงื่อนไขที่ 2 & 3: แยกการแสดงผลระหว่างเคสปกติ และเคสที่ถูกยกเลิก */}
                   {isCancelled ? (
-                    /* ส่วนแสดงข้อมูลเฉพาะเคสที่ถูกยกเลิก (แสดงสาเหตุและหมายเหตุ) */
                     <div className="w-full lg:w-80 border-t lg:border-t-0 pt-3 lg:pt-0 border-rose-100 flex flex-col justify-center">
                       <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs space-y-1">
                         <div className="flex items-center gap-1.5 font-bold text-rose-800">
@@ -522,7 +557,6 @@ export default function CasesPage() {
                       </div>
                     </div>
                   ) : (
-                    /* ส่วนแสดงข้อมูลเคสปกติ: สถานะ/ผลลัพธ์, ส่ง รพ., หัวหน้าชุด[cite: 5] */
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4 w-full lg:w-auto border-t lg:border-t-0 pt-3 lg:pt-0 border-zinc-100">
                       <div className="text-xs space-y-1">
                         <div className="flex items-center gap-1">
@@ -555,7 +589,6 @@ export default function CasesPage() {
                     </div>
                   )}
 
-                  {/* ปุ่มดูสรุปเคส และปุ่ม ดำเนินการ/รายละเอียด[cite: 5] */}
                   <div className="flex items-center justify-end gap-2 w-full lg:w-auto pt-2 lg:pt-0 border-t lg:border-t-0 border-zinc-100">
                     <Link
                       href={`/cases/${item.id}/summary`}
@@ -580,13 +613,23 @@ export default function CasesPage() {
               );
             })}
 
-            {/* ระบบแบ่งหน้า (Pagination)[cite: 5] */}
-            <div className="flex flex-col sm:flex-row items-center justify-between pt-4 px-2 text-xs text-zinc-500 gap-2">
-              <div>
-                แสดงทั้งหมด <span className="font-bold text-zinc-900">{totalCases}</span> เคส (หน้า {page} จาก {totalPages})
+            {/* แถบควบคุมการแบ่งหน้า (Pagination) */}
+            <div className="flex flex-col sm:flex-row items-center justify-between pt-4 px-2 text-xs text-zinc-500 gap-3 border-t border-zinc-100">
+              <div className="flex items-center gap-2">
+                <span>
+                  แสดงผล <span className="font-bold text-zinc-900">{cases.length}</span> จากทั้งหมด{" "}
+                  <span className="font-bold text-zinc-900">{totalCases}</span> เคส (หน้า {page} จาก {totalPages})
+                </span>
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(1)}
+                  disabled={page <= 1}
+                  className="h-8 px-2.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed text-[11px] font-medium"
+                >
+                  หน้าแรก
+                </button>
                 <button
                   onClick={() => setPage((p) => Math.max(p - 1, 1))}
                   disabled={page <= 1}
@@ -595,6 +638,11 @@ export default function CasesPage() {
                   <ChevronLeft className="w-3.5 h-3.5" />
                   <span>ก่อนหน้า</span>
                 </button>
+
+                <span className="px-2 text-xs font-semibold text-zinc-700">
+                  {page} / {totalPages}
+                </span>
+
                 <button
                   onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
                   disabled={page >= totalPages}
@@ -602,6 +650,13 @@ export default function CasesPage() {
                 >
                   <span>ถัดไป</span>
                   <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setPage(totalPages)}
+                  disabled={page >= totalPages}
+                  className="h-8 px-2.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed text-[11px] font-medium"
+                >
+                  หน้าสุดท้าย
                 </button>
               </div>
             </div>

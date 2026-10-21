@@ -22,6 +22,8 @@ import {
   Ambulance,
   CheckCircle2,
   XCircle,
+  Check,
+  LayoutList,
 } from "lucide-react";
 
 async function processImageToWebP(
@@ -86,7 +88,6 @@ function AttachmentsContent() {
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<any[]>([]);
 
-  // 🌟 เพิ่ม State สำหรับเก็บข้อมูลเคสและผู้ป่วยเพื่อแสดงบน Header
   const [caseData, setCaseData] = useState<any>(null);
   const [hospitalPt, setHospitalPt] = useState<any>(null);
   
@@ -114,7 +115,6 @@ function AttachmentsContent() {
 
     async function loadData() {
       try {
-        // 🌟 ดึงข้อมูลรายละเอียดเคสและข้อมูลรูปภาพพร้อมกัน
         const [caseRes, attRes] = await Promise.all([
           fetch(`/api/cases/${id}?t=${Date.now()}`),
           fetch(`/api/cases/${id}/attachments?t=${Date.now()}`),
@@ -208,7 +208,6 @@ function AttachmentsContent() {
     }
   };
 
-  // ดำเนินการลบรูปภาพจริงหลังจากกดยืนยันใน Modal
   const confirmDeleteAttachment = async () => {
     if (!imageToDelete) return;
 
@@ -284,7 +283,6 @@ function AttachmentsContent() {
     );
   }
 
-  // 🌟 ประมวลผลชื่อผู้ป่วยและ HN/ID ให้เป็นมาตรฐานเดียวกัน
   let ptName = "ไม่ระบุชื่อ / นิรนาม";
   let ptHnDisplay = "-";
 
@@ -307,7 +305,6 @@ function AttachmentsContent() {
     }
   }
 
-  // 🌟 เรนเดอร์ป้ายสถานะมาตรฐาน
   const renderStatusBadge = (st: string) => {
     switch (st) {
       case "pending":
@@ -358,13 +355,13 @@ function AttachmentsContent() {
 
   return (
     <AppLayout>
-      <div className="w-full space-y-6 pb-24">
-        {/* Header แถบบน ปรับปรุงให้เป็นมาตรฐานเดียวกับทุกหน้า */}
+      <div className="w-full space-y-6 pb-28">
+        {/* Header แถบบน: พร้อมปุ่มเสร็จสิ้นกลับหน้า /cases */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-zinc-200/80 shadow-xs">
           <div className="flex items-center gap-3.5">
             <Link
               href={`/cases/${id}`}
-              className="h-10 w-10 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 flex items-center justify-center text-zinc-600 transition shadow-2xs cursor-pointer"
+              className="h-10 w-10 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 flex items-center justify-center text-zinc-600 transition shadow-2xs cursor-pointer shrink-0"
               title="ย้อนกลับไปหน้ารายละเอียดเคส"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -380,7 +377,6 @@ function AttachmentsContent() {
                 {renderStatusBadge(caseData?.status || "pending")}
               </div>
 
-              {/* แสดง HN/ID และชื่อผู้ป่วยตามมาตรฐานเดียวกัน */}
               <p className="text-xs text-zinc-600 mt-1 flex items-center gap-1.5 font-medium flex-wrap">
                 <span className="text-zinc-400 font-mono">
                   {caseData?.patient_source === "HOSPITAL"
@@ -395,19 +391,28 @@ function AttachmentsContent() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-wrap">
             {hasCoordinates && (
               <a
                 href={`https://www.google.com/maps?q=${caseData.latitude},${caseData.longitude}`}
                 target="_blank"
                 rel="noreferrer"
-                className="h-10 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs"
+                className="h-10 px-3.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs"
               >
                 <MapPin className="w-4 h-4 text-emerald-600" />
-                <span>เปิดแผนที่นำทาง</span>
+                <span className="hidden md:inline">เปิดแผนที่นำทาง</span>
                 <ExternalLink className="w-3.5 h-3.5 text-emerald-500" />
               </a>
             )}
+
+            {/* ปุ่มเสร็จสิ้น (กลับหน้ารวมเคส) แสดงเด่นชัดเจน */}
+            <Link
+              href="/cases"
+              className="h-10 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold transition flex items-center gap-2 shadow-sm cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>เสร็จสิ้น (ไปหน้ารวมเคส)</span>
+            </Link>
           </div>
         </div>
 
@@ -585,6 +590,32 @@ function AttachmentsContent() {
           )}
         </div>
 
+        {/* 🌟 2. Bottom Action Bar ล่างสุด: ให้เจ้าหน้าที่กดเสร็จสิ้นเพื่อกลับหน้ารวมเคสทันที */}
+        <div className="bg-white p-4 rounded-2xl border border-zinc-200/90 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <Check className="w-4 h-4 text-emerald-600" />
+            <span>อัปโหลดรูปภาพและการบันทึกเสร็จสมบูรณ์ พร้อมรับเคสถัดไป</span>
+          </div>
+
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Link
+              href={`/cases/${id}`}
+              className="flex-1 sm:flex-none h-10 px-5 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-2xs"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>ย้อนกลับไปรายละเอียดเคส</span>
+            </Link>
+
+            <Link
+              href="/cases"
+              className="flex-1 sm:flex-none h-10 px-6 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm"
+            >
+              <LayoutList className="w-4 h-4 text-emerald-400" />
+              <span>เสร็จสิ้น (ไปหน้ารวมเคส)</span>
+            </Link>
+          </div>
+        </div>
+
         {/* Lightbox Modal */}
         {activeImageIndex !== null && attachments[activeImageIndex] && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-md p-4 overflow-hidden select-none">
@@ -683,7 +714,7 @@ function AttachmentsContent() {
           </div>
         )}
 
-        {/* Modern Success Modal */}
+        {/* 🌟 3. Modern Success Modal: เพิ่มปุ่มกดเสร็จสิ้นทันที */}
         {showSuccessModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-zinc-100 text-center space-y-5">
@@ -696,18 +727,25 @@ function AttachmentsContent() {
                   อัปโหลดรูปภาพสำเร็จ
                 </h3>
                 <p className="text-xs text-zinc-500">
-                  ระบบบันทึกรูปภาพเรียบร้อยแล้ว คุณสามารถดูรูปภาพในแกลเลอรีหรืออัปโหลดเพิ่มได้ทันที
+                  ระบบบันทึกรูปภาพเรียบร้อยแล้ว คุณสามารถดูรูปภาพในแกลเลอรี อัปโหลดเพิ่ม หรือคลิกเสร็จสิ้นเพื่อกลับไปยังหน้ารวมเคส
                 </p>
               </div>
 
-              <div className="pt-1">
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
                 <button
                   type="button"
                   onClick={() => setShowSuccessModal(false)}
-                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 text-white text-xs font-bold shadow-md transition cursor-pointer"
+                  className="w-full py-2.5 px-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 text-xs font-semibold transition cursor-pointer"
                 >
-                  ตกลง
+                  อัปโหลดต่อ
                 </button>
+                <Link
+                  href="/cases"
+                  className="w-full py-2.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>เสร็จสิ้น (ไปหน้ารวม)</span>
+                </Link>
               </div>
             </div>
           </div>
