@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   FilePlus,
   MapPin,
+  Images,
   ClipboardList,
   LogOut,
   User,
@@ -38,6 +39,7 @@ const menuItems = [
   { title: "บันทึกรับแจ้งเหตุใหม่", href: "/cases/new", icon: FilePlus },
   { title: "รายการเคสฉุกเฉิน", href: "/cases", icon: ClipboardList },
   { title: "แผนที่ติดตามรถพยาบาล", href: "/tracking", icon: MapPin },
+  { title: "คลังภาพการปฏิบัติงาน", href: "/gallery", icon: Images },
 ];
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {

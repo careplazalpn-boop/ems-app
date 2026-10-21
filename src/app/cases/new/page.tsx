@@ -49,11 +49,9 @@ const initialFormState = {
   latitude: null as number | string | null,
   longitude: null as number | string | null,
 
-  // สิทธิการรักษา
   insurance_type: "UC",
   insurance_code: "",
 
-  // การแจ้งเหตุ
   caller_name: "",
   caller_phone: "",
   incident_address: "",
@@ -67,6 +65,9 @@ function NewCaseFormContent() {
   const initialHn = searchParams.get("hn") || "";
 
   const [searchInput, setSearchInput] = useState("");
+  const [selectedVillageMoo, setSelectedVillageMoo] = useState("all"); // 🌟 ตัวเลือกชุมชน (ค่าเริ่มต้น "all")
+  const [villagesList, setVillagesList] = useState<any[]>([]); // 🌟 รายการชุมชนจาก Table village
+
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchSource, setSearchSource] = useState<string>("");
@@ -84,6 +85,22 @@ function NewCaseFormContent() {
     parseFloat(String(formData.longitude)) !== 0
   );
 
+  // 🌟 ดึงข้อมูลหมู่บ้าน/ชุมชนจาก Table village เมื่อเปิดหน้า
+  useEffect(() => {
+    async function loadVillages() {
+      try {
+        const res = await fetch("/api/villages");
+        const data = await res.json();
+        if (res.ok && data.villages) {
+          setVillagesList(data.villages);
+        }
+      } catch (err) {
+        console.error("Load villages error:", err);
+      }
+    }
+    loadVillages();
+  }, []);
+
   useEffect(() => {
     if (initialHn) {
       executeSearch({ hn: initialHn }).then(() => {
@@ -96,6 +113,7 @@ function NewCaseFormContent() {
     if (confirm("คุณต้องการล้างข้อมูลในแบบฟอร์มทั้งหมดใช่หรือไม่?")) {
       setFormData(initialFormState);
       setSearchInput("");
+      setSelectedVillageMoo("all");
       setSearchSource("");
       setImageError(false);
       window.history.replaceState(null, "", window.location.pathname);
@@ -110,14 +128,14 @@ function NewCaseFormContent() {
       alert("⚠️ คำเตือน: ผู้ป่วยรายนี้มีประวัติระบุว่า 'เสียชีวิตแล้ว' ในระบบโรงพยาบาล");
     }
 
-    // แปลงค่าเพศให้เป็น "1" หรือ "2"
-  let formattedGender = "1";
-  const rawGender = String(pt.gender || pt.sex || "").trim();
-  if (rawGender === "1" || rawGender.toLowerCase() === "male") {
-    formattedGender = "1";
-  } else if (rawGender === "2" || rawGender.toLowerCase() === "female") {
-    formattedGender = "2";
-  }
+    let formattedGender = "1";
+    const rawGender = String(pt.gender || pt.sex || "").trim();
+    if (rawGender === "1" || rawGender.toLowerCase() === "male") {
+      formattedGender = "1";
+    } else if (rawGender === "2" || rawGender.toLowerCase() === "female") {
+      formattedGender = "2";
+    }
+
     setFormData((prev) => ({
       ...prev,
       patient_source: pt.source,
@@ -148,34 +166,27 @@ function NewCaseFormContent() {
     e.preventDefault();
     const query = searchInput.trim();
 
-    if (!query) {
-      alert("กรุณากรอกคำค้นหา");
+    if (!query && selectedVillageMoo === "all") {
+      alert("กรุณากรอกคำค้นหา หรือเลือกชุมชนที่ต้องการค้นหา");
       return;
     }
 
     const isNumeric = /^\d+$/.test(query);
-    if (isNumeric) {
-      if (query.length !== 13) {
-        alert("การค้นหาด้วยเลขประจำตัวประชาชนต้องกรอกให้ครบ 13 หลักเท่านั้น");
-        return;
-      }
-      executeSearch({ cid: query });
+    if (isNumeric && query.length === 13) {
+      executeSearch({ cid: query, moo: selectedVillageMoo });
     } else {
-      if (query.length < 2) {
-        alert("กรุณาระบุคำค้นหาชื่อ-สกุลอย่างน้อย 2 ตัวอักษร");
-        return;
-      }
-      executeSearch({ query });
+      executeSearch({ query, moo: selectedVillageMoo });
     }
   };
 
-  const executeSearch = async (params: { hn?: string; cid?: string; query?: string }) => {
+  const executeSearch = async (params: { hn?: string; cid?: string; query?: string; moo?: string }) => {
     setLoadingSearch(true);
     try {
       const queryParams = new URLSearchParams();
       if (params.hn) queryParams.set("hn", params.hn);
       if (params.cid) queryParams.set("cid", params.cid);
       if (params.query) queryParams.set("query", params.query);
+      if (params.moo) queryParams.set("moo", params.moo);
 
       const res = await fetch(`/api/patients/search?${queryParams.toString()}`);
       const data = await res.json();
@@ -227,15 +238,19 @@ function NewCaseFormContent() {
 
     setSubmitting(true);
     try {
+      const payload = {
+        ...formData,
+        patient_hn: formData.hn || null,
+      };
+
       const res = await fetch("/api/cases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
 
       if (res.ok && (data.success || data.id || data.case_number)) {
-        // ดึงเลขที่ใบงานอย่างปลอดภัย รองรับ data.case_number, data.case?.case_number หรือ data.data?.case_number
         const caseNo = data.case_number || data.case?.case_number || data.data?.case_number || "EMS";
         alert(`บันทึกเคสฉุกเฉินสำเร็จ! เลขที่ใบงาน: ${caseNo}`);
         router.push("/cases");
@@ -306,7 +321,7 @@ function NewCaseFormContent() {
           </div>
         </div>
 
-        {/* 1. CARD ค้นหา: โทนสีส้มอ่อนนวลตา */}
+        {/* 🌟 1. CARD ค้นหา: เพิ่มตัวเลือกชุมชนจาก Table village */}
         <Card className="rounded-2xl border-amber-200/80 bg-gradient-to-r from-amber-50/60 via-orange-50/40 to-amber-50/70 shadow-xs">
           <CardContent className="p-5 sm:p-6">
             <form onSubmit={handleSearchSubmit} className="space-y-3">
@@ -318,27 +333,52 @@ function NewCaseFormContent() {
                   <span>ค้นหาประวัติผู้ป่วยเดิม</span>
                 </label>
                 <span className="text-xs text-amber-800/80 font-medium">
-                  ค้นด้วยชื่อ-สกุล (เช่น <span className="font-semibold text-amber-900">"สม มา"</span>) หรือเลขบัตร 13 หลัก
+                  ค้นด้วยชื่อ-สกุล หรือเลขบัตร 13 หลัก พร้อมเลือกขอบเขตชุมชน
                 </span>
               </div>
-              <div className="flex flex-col sm:flex-row items-center gap-3">
-                <div className="relative flex-1 w-full">
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                {/* ช่องเลือกชุมชน */}
+                <div className="md:col-span-4">
+                  <div className="relative">
+                    <select
+                      value={selectedVillageMoo}
+                      onChange={(e) => setSelectedVillageMoo(e.target.value)}
+                      className="w-full h-10 pl-9 pr-3 rounded-xl border border-amber-200 bg-white text-xs sm:text-sm font-semibold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 cursor-pointer"
+                    >
+                      <option value="all">🏘️ ทุกชุมชน (ทั้งหมด)</option>
+                      {villagesList.map((v) => (
+                        <option key={v.village_moo} value={v.village_moo}>
+                          ม.{v.village_moo} {v.village_name}
+                        </option>
+                      ))}
+                    </select>
+                    <Building2 className="w-4 h-4 text-amber-600 absolute left-3 top-3 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* ช่องกรอกข้อความค้นหา */}
+                <div className="md:col-span-6 relative">
                   <input
                     type="text"
-                    placeholder="พิมพ์ชื่อ นามสกุล หรือเลขประจำตัวประชาชน 13 หลัก..."
+                    placeholder="พิมพ์ชื่อ นามสกุล หรือเลขบัตร 13 หลัก..."
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     className="w-full h-10 pl-10 pr-4 rounded-xl border border-amber-200 bg-white text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 transition"
                   />
                   <Search className="w-4 h-4 text-amber-500 absolute left-3.5 top-3" />
                 </div>
-                <button
-                  type="submit"
-                  disabled={loadingSearch}
-                  className="w-full sm:w-auto h-10 px-6 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold transition flex items-center justify-center gap-2 shadow-xs disabled:bg-zinc-300 disabled:text-zinc-500 cursor-pointer"
-                >
-                  {loadingSearch ? "กำลังค้นหา..." : "ค้นหาประวัติ"}
-                </button>
+
+                {/* ปุ่มค้นหา */}
+                <div className="md:col-span-2">
+                  <button
+                    type="submit"
+                    disabled={loadingSearch}
+                    className="w-full h-10 px-5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold transition flex items-center justify-center gap-2 shadow-xs disabled:bg-zinc-300 disabled:text-zinc-500 cursor-pointer"
+                  >
+                    {loadingSearch ? "กำลังค้น..." : "ค้นหา"}
+                  </button>
+                </div>
               </div>
             </form>
           </CardContent>
@@ -380,7 +420,7 @@ function NewCaseFormContent() {
                   <div className="w-36 h-40 rounded-2xl border-2 border-dashed border-sky-200 bg-sky-50/30 overflow-hidden flex items-center justify-center shadow-xs relative group">
                     {formData.hn && !imageError ? (
                       <img
-                        key={formData.hn} // เพิ่ม key เพื่อบังคับให้ re-mount element เมื่อ HN เปลี่ยน
+                        key={formData.hn}
                         src={`/uploads/patient/${formData.hn}.webp?v=${formData.hn}`}
                         alt={`รูปผู้ป่วย HN ${formData.hn}`}
                         className={`w-full h-full object-cover transition duration-300 group-hover:scale-105 ${
@@ -411,11 +451,6 @@ function NewCaseFormContent() {
                     ) : (
                       <span className="text-[11px] text-zinc-400">ยังไม่มี HN</span>
                     )}
-                    {formData.is_deceased && (
-                      <span className="text-[11px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200">
-                        สถานะ: เสียชีวิต
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -426,7 +461,7 @@ function NewCaseFormContent() {
                     <select
                       value={formData.id_type}
                       onChange={(e) => setFormData({ ...formData, id_type: e.target.value })}
-                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 focus:outline-none transition"
+                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:outline-none"
                     >
                       <option value="CID">บัตรประชาชนไทย (CID)</option>
                       <option value="PASSPORT">หนังสือเดินทาง (Passport)</option>
@@ -446,7 +481,7 @@ function NewCaseFormContent() {
                           ? setFormData({ ...formData, passport_no: e.target.value })
                           : setFormData({ ...formData, cid: e.target.value })
                       }
-                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 focus:outline-none transition"
+                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
@@ -456,7 +491,7 @@ function NewCaseFormContent() {
                       type="text"
                       value={formData.nationality}
                       onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
-                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 focus:outline-none transition"
+                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
@@ -471,7 +506,7 @@ function NewCaseFormContent() {
                       className={`w-full h-10 rounded-xl border border-zinc-200 px-3 text-sm text-zinc-800 focus:outline-none ${
                         formData.patient_source === "HOSPITAL"
                           ? "bg-zinc-100 text-zinc-500 font-mono"
-                          : "bg-zinc-50/50 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10"
+                          : "bg-zinc-50/50 focus:bg-white focus:border-sky-500"
                       }`}
                     />
                   </div>
@@ -483,7 +518,7 @@ function NewCaseFormContent() {
                       placeholder="นาย, นาง, น.ส."
                       value={formData.pname}
                       onChange={(e) => setFormData({ ...formData, pname: e.target.value })}
-                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 focus:outline-none transition"
+                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
@@ -497,7 +532,7 @@ function NewCaseFormContent() {
                       placeholder="ระบุชื่อจริง"
                       value={formData.fname}
                       onChange={(e) => setFormData({ ...formData, fname: e.target.value })}
-                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 font-medium focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 focus:outline-none transition"
+                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 font-medium focus:bg-white focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
@@ -508,7 +543,7 @@ function NewCaseFormContent() {
                       placeholder="ระบุนามสกุล"
                       value={formData.lname}
                       onChange={(e) => setFormData({ ...formData, lname: e.target.value })}
-                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 font-medium focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 focus:outline-none transition"
+                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 font-medium focus:bg-white focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
@@ -516,7 +551,7 @@ function NewCaseFormContent() {
                     <div>
                       <label className="block text-xs font-semibold text-zinc-700 mb-1.5">เพศ</label>
                       <select
-                        value={formData.gender} // 💡 หากใน State ของคุณเปลี่ยนชื่อเป็น formData.sex ให้แก้ตรงนี้ด้วยครับ
+                        value={formData.gender}
                         onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                         className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:outline-none"
                       >
@@ -547,7 +582,7 @@ function NewCaseFormContent() {
                       placeholder="เช่น A, B, O, AB"
                       value={formData.blood_group}
                       onChange={(e) => setFormData({ ...formData, blood_group: e.target.value })}
-                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 focus:outline-none transition"
+                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
@@ -558,7 +593,7 @@ function NewCaseFormContent() {
                       placeholder="เบอร์มือถือ หรือเบอร์ติดต่อ"
                       value={formData.patient_phone}
                       onChange={(e) => setFormData({ ...formData, patient_phone: e.target.value })}
-                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 focus:outline-none transition"
+                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
@@ -572,7 +607,7 @@ function NewCaseFormContent() {
                       placeholder="ระบุชื่อชุมชน หรือบุคคลนอกเขต..."
                       value={formData.village_name}
                       onChange={(e) => setFormData({ ...formData, village_name: e.target.value })}
-                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 focus:outline-none transition"
+                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
@@ -585,7 +620,7 @@ function NewCaseFormContent() {
                       placeholder="บ้านเลขที่ หมู่ ซอย ถนน ตำบล..."
                       value={formData.patient_address}
                       onChange={(e) => setFormData({ ...formData, patient_address: e.target.value })}
-                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 focus:outline-none transition"
+                      className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-sky-500 focus:outline-none"
                     />
                   </div>
                 </div>
@@ -611,7 +646,7 @@ function NewCaseFormContent() {
                   <select
                     value={formData.insurance_type}
                     onChange={(e) => setFormData({ ...formData, insurance_type: e.target.value })}
-                    className="w-full h-10 rounded-xl border border-purple-200/80 bg-purple-50/20 px-3 text-sm text-zinc-800 font-medium focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10 focus:outline-none transition"
+                    className="w-full h-10 rounded-xl border border-purple-200/80 bg-purple-50/20 px-3 text-sm text-zinc-800 font-medium focus:bg-white focus:border-purple-500 focus:outline-none"
                   >
                     <option value="UC">บัตรทอง / ประกันสุขภาพถ้วนหน้า (UC)</option>
                     <option value="SSS">ประกันสังคม (SSS)</option>
@@ -632,7 +667,7 @@ function NewCaseFormContent() {
                     placeholder="เช่น เลขบัตร รพ.ต้นสังกัด หรือเลขที่เคลม พ.ร.บ."
                     value={formData.insurance_code}
                     onChange={(e) => setFormData({ ...formData, insurance_code: e.target.value })}
-                    className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10 focus:outline-none transition"
+                    className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-purple-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -662,7 +697,7 @@ function NewCaseFormContent() {
                     placeholder="ชื่อผู้แจ้ง หรือ พยานที่พบเห็น"
                     value={formData.caller_name}
                     onChange={(e) => setFormData({ ...formData, caller_name: e.target.value })}
-                    className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10 focus:outline-none transition"
+                    className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-amber-500 focus:outline-none"
                   />
                 </div>
 
@@ -673,7 +708,7 @@ function NewCaseFormContent() {
                     placeholder="เบอร์โทรกลับฉุกเฉิน"
                     value={formData.caller_phone}
                     onChange={(e) => setFormData({ ...formData, caller_phone: e.target.value })}
-                    className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10 focus:outline-none transition"
+                    className="w-full h-10 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm text-zinc-800 focus:bg-white focus:border-amber-500 focus:outline-none"
                   />
                 </div>
 
@@ -710,7 +745,7 @@ function NewCaseFormContent() {
                       placeholder="ระบุสถานที่สำคัญ จุดสังเกต ถนน ซอย หรือพิกัดจุดนัดพบของรถพยาบาล..."
                       value={formData.incident_address}
                       onChange={(e) => setFormData({ ...formData, incident_address: e.target.value })}
-                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-zinc-200 bg-zinc-50/50 text-sm text-zinc-800 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10 focus:outline-none transition"
+                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-zinc-200 bg-zinc-50/50 text-sm text-zinc-800 focus:bg-white focus:border-amber-500 focus:outline-none"
                     />
                     <MapPin className="w-4 h-4 text-amber-500 absolute left-3.5 top-3.5" />
                   </div>
@@ -725,7 +760,7 @@ function NewCaseFormContent() {
                     placeholder="เช่น หมดสติ ปลุกไม่ตื่น หายใจเฮือก, อุบัติเหตุรถชนมีบาดแผลฉีกขาดขนาดใหญ่และกระดูกหัก..."
                     value={formData.chief_complaint}
                     onChange={(e) => setFormData({ ...formData, chief_complaint: e.target.value })}
-                    className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 p-3.5 text-sm text-zinc-800 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10 focus:outline-none transition"
+                    className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 p-3.5 text-sm text-zinc-800 focus:bg-white focus:border-amber-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -761,12 +796,10 @@ function NewCaseFormContent() {
         </form>
       </div>
 
-      {/* Modal Popup เลือกผู้ป่วย พร้อมระบบ Scroll แนวนอนบนมือถือ */}
+      {/* Modal Popup เลือกผู้ป่วย */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
-            
-            {/* Modal Header */}
             <div className="p-4 px-5 sm:px-6 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
               <div className="flex items-center gap-2.5">
                 <div className="h-9 w-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-200/50 shrink-0">
@@ -787,31 +820,12 @@ function NewCaseFormContent() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            {/* คำแนะนำสำหรับมือถือ & แจ้งเตือนรายการเกิน */}
-            <div className="px-4 sm:px-6 pt-3 space-y-2">
-              {/* ข้อความบอกผู้ใช้มือถือว่าเลื่อนข้างได้ */}
-              <div className="sm:hidden flex items-center justify-between text-[11px] text-zinc-400 px-1">
-                <span>👈 เลื่อนซ้าย-ขวา เพื่อดูข้อมูลเพิ่มเติม 👉</span>
-              </div>
-
-              {totalFound > 30 && (
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 flex items-start gap-2.5 text-xs text-amber-800">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold">พบข้อมูลมากเกินไป ({totalFound} รายการ):</span>{" "}
-                    แสดงผลเพียง 30 รายการแรก เพื่อความรวดเร็ว กรุณาระบุคำค้นหาให้แคบลง เช่น พิมพ์ชื่อและนามสกุลเต็ม หรือค้นหาด้วยเลขประจำตัวประชาชน
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* ส่วนตาราง: รองรับเลื่อนแนวตั้ง (overflow-y-auto) และแนวนอน (overflow-x-auto) */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               <div className="border border-zinc-200 rounded-xl overflow-x-auto shadow-2xs">
-                <table className="w-full min-w-[760px] text-left text-xs border-collapse">
+                <table className="w-full min-w-[820px] text-left text-xs border-collapse">
                   <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-semibold sticky top-0 z-10">
                     <tr>
+                      <th className="py-3 px-3 w-16 text-center whitespace-nowrap">รูปถ่าย</th>
                       <th className="py-3 px-3 w-28 whitespace-nowrap">HN</th>
                       <th className="py-3 px-3 w-36 whitespace-nowrap">เลขประจำตัวประชาชน</th>
                       <th className="py-3 px-3 min-w-[160px] whitespace-nowrap">ชื่อ - สกุล</th>
@@ -823,71 +837,95 @@ function NewCaseFormContent() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 text-zinc-800">
-                    {patientResults.map((pt) => (
-                      <tr
-                        key={pt.hn || pt.cid}
-                        className={`hover:bg-amber-50/50 transition cursor-pointer ${
-                          pt.is_deceased ? "bg-red-50/30" : ""
-                        }`}
-                        onClick={() => applyPatientData(pt)}
-                      >
-                        <td className="py-3 px-3 font-mono font-bold text-amber-700 whitespace-nowrap">
-                          {pt.hn}
-                        </td>
-                        <td className="py-3 px-3 font-mono text-zinc-600 whitespace-nowrap">
-                          {pt.cid || "-"}
-                        </td>
-                        <td className="py-3 px-3 font-medium text-zinc-900 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span>{pt.pname}{pt.fname} {pt.lname}</span>
-                            {pt.is_deceased && (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
-                                <Skull className="w-2.5 h-2.5" /> เสียชีวิต
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 font-medium text-zinc-700 whitespace-nowrap">
-                          {pt.age ? `${pt.age} ปี` : "-"}
-                        </td>
-                        <td className="py-3 px-3 text-zinc-600 whitespace-nowrap">
-                          {pt.road || "-"}
-                        </td>
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium border text-[11px] ${
-                              pt.village_name === "บุคคลนอกเขต"
-                                ? "bg-zinc-100 text-zinc-600 border-zinc-200"
-                                : "bg-sky-50 text-sky-700 border-sky-100"
-                            }`}
-                          >
-                            <Building2 className="w-3 h-3 text-sky-500 shrink-0" />
-                            {pt.village_name}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-zinc-600 whitespace-nowrap">
-                          {pt.phone || "-"}
-                        </td>
-                        <td className="py-3 px-3 text-right whitespace-nowrap sticky right-0 bg-white/95 backdrop-blur-xs">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              applyPatientData(pt);
-                            }}
-                            className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-amber-600 text-white text-xs font-semibold transition cursor-pointer shadow-2xs"
-                          >
-                            เลือก
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {patientResults.map((pt) => {
+                      const photoUrl = pt.imageUrl || `/uploads/patient/${pt.hn}.webp?v=${pt.hn}`;
+
+                      return (
+                        <tr
+                          key={pt.hn || pt.cid}
+                          className={`hover:bg-amber-50/50 transition cursor-pointer ${
+                            pt.is_deceased ? "bg-red-50/30" : ""
+                          }`}
+                          onClick={() => applyPatientData(pt)}
+                        >
+                          {/* 🌟 แสดงรูปภาพ Thumbnail ของคนไข้ */}
+                          <td className="py-2 px-3 text-center whitespace-nowrap">
+                            <div className="w-10 h-11 rounded-lg border border-zinc-200 bg-zinc-100 overflow-hidden mx-auto relative shadow-2xs">
+                              <img
+                                src={photoUrl}
+                                alt={`รูป HN ${pt.hn}`}
+                                className={`w-full h-full object-cover ${
+                                  pt.is_deceased ? "grayscale" : ""
+                                }`}
+                                onError={(e) => {
+                                  e.currentTarget.src = "/images/avatars/default.png";
+                                }}
+                              />
+                              {pt.is_deceased && (
+                                <div className="absolute inset-x-0 bottom-0 bg-red-600 text-white text-[7px] font-bold text-center leading-tight">
+                                  เสียชีวิต
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-3 font-mono font-bold text-amber-700 whitespace-nowrap">
+                            {pt.hn}
+                          </td>
+                          <td className="py-3 px-3 font-mono text-zinc-600 whitespace-nowrap">
+                            {pt.cid || "-"}
+                          </td>
+                          <td className="py-3 px-3 font-medium text-zinc-900 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{pt.pname}{pt.fname} {pt.lname}</span>
+                              {pt.is_deceased && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
+                                  <Skull className="w-2.5 h-2.5" /> เสียชีวิต
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 font-medium text-zinc-700 whitespace-nowrap">
+                            {pt.age ? `${pt.age} ปี` : "-"}
+                          </td>
+                          <td className="py-3 px-3 text-zinc-600 whitespace-nowrap">
+                            {pt.road || "-"}
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium border text-[11px] ${
+                                pt.village_name === "บุคคลนอกเขต"
+                                  ? "bg-zinc-100 text-zinc-600 border-zinc-200"
+                                  : "bg-sky-50 text-sky-700 border-sky-100"
+                              }`}
+                            >
+                              <Building2 className="w-3 h-3 text-sky-500 shrink-0" />
+                              {pt.village_name}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-zinc-600 whitespace-nowrap">
+                            {pt.phone || "-"}
+                          </td>
+                          <td className="py-3 px-3 text-right whitespace-nowrap sticky right-0 bg-white/95 backdrop-blur-xs">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                applyPatientData(pt);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-amber-600 text-white text-xs font-semibold transition cursor-pointer shadow-2xs"
+                            >
+                              เลือก
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
 
-            {/* Modal Footer */}
             <div className="p-3.5 px-5 sm:px-6 border-t border-zinc-100 flex justify-end bg-zinc-50/50">
               <button
                 type="button"
@@ -897,7 +935,6 @@ function NewCaseFormContent() {
                 ปิดหน้าต่าง
               </button>
             </div>
-
           </div>
         </div>
       )}

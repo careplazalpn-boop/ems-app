@@ -3,297 +3,217 @@ import { prisma } from "@/lib/prisma";
 import fs from "fs";
 import path from "path";
 
-async function ensurePatientImage(hn: string): Promise<string | null> {
+const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "patient");
+const SEARCH_LIMIT = 100; // 🌟 กำหนด Limit สูงสุดที่แนะนำ
+
+async function ensurePatientImage(hn: string): Promise<string> {
+  const cleanHn = hn.trim();
+  const filePath = path.join(UPLOAD_DIR, `${cleanHn}.webp`);
+  const publicUrl = `/uploads/patient/${cleanHn}.webp?v=${cleanHn}`;
+
+  if (fs.existsSync(filePath)) {
+    return publicUrl;
+  }
+
   try {
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "patient");
-    const filePath = path.join(uploadDir, `${hn}.webp`);
+    const patientImgRecord = await (prisma as any).patient_image?.findFirst({
+      where: {
+        OR: [
+          { hn: cleanHn },
+          { hn: cleanHn.padStart(9, "0") },
+          { hn: cleanHn.padStart(7, "0") },
+          { hn: String(parseInt(cleanHn, 10)) },
+        ],
+      },
+    }).catch(() => null);
 
-    if (fs.existsSync(filePath)) {
-      return `/uploads/patient/${hn}.webp`;
-    }
+    const imageBuffer = patientImgRecord?.image || patientImgRecord?.img || null;
 
-    const ptImg = await prisma.patient_image.findFirst({
-      where: { hn: hn },
-    });
-
-    if (ptImg && ptImg.image) {
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
+    if (imageBuffer && Buffer.isBuffer(imageBuffer)) {
+      if (!fs.existsSync(UPLOAD_DIR)) {
+        fs.mkdirSync(UPLOAD_DIR, { recursive: true });
       }
-      fs.writeFileSync(filePath, Buffer.from(ptImg.image));
-      return `/uploads/patient/${hn}.webp`;
+      fs.writeFileSync(filePath, imageBuffer);
+      return publicUrl;
     }
   } catch (err) {
-    console.error("Error writing patient image:", err);
-  }
-  return null;
-}
-
-function cleanCoordinate(val: any): string | null {
-  if (val === null || val === undefined || val === "") return null;
-  const num = parseFloat(String(val).trim());
-  if (isNaN(num) || num === 0) return null;
-  return String(val).trim();
-}
-
-// ฟังก์ชันคำนวณอายุเต็มปีจากวันเกิด
-function calculateAge(birthday: Date | string | null): number | null {
-  if (!birthday) return null;
-  const birthDate = new Date(birthday);
-  if (isNaN(birthDate.getTime())) return null;
-
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const m = today.getMonth() - birthDate.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
-  }
-  return age >= 0 ? age : null;
-}
-
-async function formatHospitalPatient(pt: any) {
-  await ensurePatientImage(pt.hn);
-
-  // 1. ดึงสัญชาติ
-  let nationalityName = "ไทย";
-  if (pt.nationality) {
-    const natCode = String(pt.nationality).trim();
-    try {
-      const result: any[] = await prisma.$queryRaw`
-        SELECT CONVERT(name USING utf8mb4) AS name 
-        FROM nationality 
-        WHERE nationality = ${natCode} 
-           OR nhso_code = ${natCode}
-           OR nationality = LPAD(${natCode}, 3, '0')
-        LIMIT 1
-      `;
-      if (result && result.length > 0 && result[0].name) {
-        nationalityName = result[0].name.trim();
-      }
-    } catch (e) {
-      console.error("Error reading nationality:", e);
-    }
+    console.error(`Error generating image for HN ${cleanHn}:`, err);
   }
 
-  // 2. ดึงชื่อชุมชน / ตรวจสอบนอกเขต
-  let villageName = "บุคคลนอกเขต";
-  if (pt.chwpart && pt.amppart && pt.tmbpart && pt.moopart) {
-    try {
-      const chw = String(pt.chwpart).padStart(2, "0");
-      const amp = String(pt.amppart).padStart(2, "0");
-      const tmb = String(pt.tmbpart).padStart(2, "0");
-      const moo = String(pt.moopart).padStart(2, "0");
-      const villageCode = `${chw}${amp}${tmb}${moo}`;
-
-      const vRecord: any[] = await prisma.$queryRaw`
-        SELECT CONVERT(village_name USING utf8mb4) AS village_name 
-        FROM village 
-        WHERE village_code = ${villageCode} 
-        LIMIT 1
-      `;
-      if (vRecord && vRecord.length > 0 && vRecord[0].village_name) {
-        villageName = vRecord[0].village_name.trim();
-      }
-    } catch (vErr) {
-      console.error("Error reading village:", vErr);
-    }
-  }
-
-  // 3. ตรวจสอบสถานะเสียชีวิต
-  const isDeceased =
-    pt.death === "Y" ||
-    pt.death === "1" ||
-    Boolean(pt.death_date) ||
-    Boolean(pt.deathday);
-
-  // 4. เบอร์โทรศัพท์
-  const phone =
-    pt.mobile_phone_number?.trim() ||
-    pt.hometel?.trim() ||
-    pt.informtel?.trim() ||
-    "";
-
-  // 5. คำนวณอายุจาก birthday (ถ้าไม่มี ใช้อายุที่บันทึกไว้ใน pt.age_y)
-  const calculatedAge = calculateAge(pt.birthday) ?? (pt.age_y ? parseInt(String(pt.age_y)) : null);
-
-  // 6. ประกอบที่อยู่ patient.address_full (ถ้าไม่มีในฟิลด์ address_full ให้รวมที่อยู่อัตโนมัติ)
-  const road = pt.road ? `ถ.${pt.road}`.trim() : "";
-  const addressFull =
-    pt.address_full?.trim() ||
-    [
-      pt.addrpart ? `บ้านเลขที่ ${pt.addrpart}` : "",
-      pt.moopart ? `หมู่ ${pt.moopart}` : "",
-      road,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-
-  const patientSex = pt.sex ? String(pt.sex).trim() : "";
-  const lat = cleanCoordinate(pt.home_latitude);
-  const lng = cleanCoordinate(pt.home_longitude);
-  
-
-  return {
-    source: "HOSPITAL",
-    hn: pt.hn,
-    cid: pt.cid || "",
-    pname: pt.pname || "",
-    fname: pt.fname || "",
-    lname: pt.lname || "",
-    gender: patientSex === "1" ? "1" : patientSex === "2" ? "2" : "other",
-    age: calculatedAge ? String(calculatedAge) : "",
-    birthday: pt.birthday ? pt.birthday.toISOString().split("T")[0] : "",
-    blood_group: pt.bloodgrp?.trim() || pt.bloodgroup?.trim() || "",
-    road: pt.road?.trim() || "-",
-    phone: phone,
-    nationality: nationalityName,
-    village_name: villageName,
-    is_deceased: isDeceased,
-    address: addressFull,
-    insurance_type: pt.pttype || "",
-    latitude: lat,
-    longitude: lng,
-  };
+  return publicUrl;
 }
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const hn = searchParams.get("hn")?.trim();
-    const cid = searchParams.get("cid")?.trim();
-    const query = searchParams.get("query")?.trim();
+    const query = searchParams.get("query")?.trim() || "";
+    const cid = searchParams.get("cid")?.trim() || "";
+    const hn = searchParams.get("hn")?.trim() || "";
+    const moo = searchParams.get("moo")?.trim() || "all";
+
+    const locationCondition: any = {};
+    if (moo && moo !== "all") {
+      const cleanMoo = String(parseInt(moo, 10));
+      const paddedMoo = cleanMoo.padStart(2, "0");
+
+      locationCondition.moopart = { in: [cleanMoo, paddedMoo] };
+      locationCondition.tmbpart = "01";
+      locationCondition.amppart = "01";
+      locationCondition.chwpart = "51";
+    }
+
+    const searchConditions: any[] = [];
 
     if (hn) {
-      const hospitalPt = await prisma.patient.findFirst({
-        where: { hn: hn },
-      });
-
-      if (hospitalPt) {
-        const formatted = await formatHospitalPatient(hospitalPt);
-        return NextResponse.json({
-          found: true,
-          total: 1,
-          hasMore: false,
-          patients: [formatted],
-          data: formatted,
-          source: "HOSPITAL",
-        });
-      }
-
-      return NextResponse.json({
-        found: false,
-        total: 0,
-        hasMore: false,
-        patients: [],
-        message: "ไม่พบข้อมูลผู้ป่วย",
+      searchConditions.push({
+        OR: [
+          { hn: hn },
+          { hn: hn.padStart(9, "0") },
+          { hn: hn.padStart(7, "0") },
+          { hn: String(parseInt(hn, 10)) },
+        ],
       });
     }
 
-    if (cid && cid.length !== 13) {
-      return NextResponse.json(
-        { error: "การค้นหาด้วยเลขประจำตัวประชาชนต้องกรอกให้ครบ 13 หลักเท่านั้น" },
-        { status: 400 }
-      );
+    if (cid) {
+      searchConditions.push({ cid: cid });
     }
 
-    if (!cid && (!query || query.length < 2)) {
-      return NextResponse.json(
-        { error: "กรุณาระบุคำค้นหาชื่อ-สกุลอย่างน้อย 2 ตัวอักษร หรือระบุเลขบัตรประชาชนให้ครบ 13 หลัก" },
-        { status: 400 }
-      );
-    }
-
-    let whereClause: any = {};
-
-    if (cid && cid.length === 13) {
-      whereClause = { cid: cid };
-    } else if (query) {
-      const terms = query.split(/\s+/).filter((t) => t.length > 0);
-      whereClause = {
-        AND: terms.map((term) => ({
-          OR: [
-            { fname: { contains: term } },
-            { lname: { contains: term } },
+    if (query) {
+      const parts = query.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        searchConditions.push({
+          AND: [
+            { fname: { contains: parts[0] } },
+            { lname: { contains: parts[1] } },
           ],
-        })),
-      };
-    }
-
-    const totalCount = await prisma.patient.count({
-      where: whereClause,
-    });
-
-    if (totalCount === 0) {
-      if (cid && cid.length === 13) {
-        const emsPt = await prisma.ems_patients.findFirst({
-          where: { id_card_no: cid },
         });
-
-        if (emsPt) {
-          const emsFormatted = {
-            source: "TEMPORARY",
-            ems_patient_id: emsPt.id,
-            cid: emsPt.id_card_no || "",
-            passport_no: emsPt.passport_no || "",
-            pname: emsPt.pname || "",
-            fname: emsPt.fname,
-            lname: emsPt.lname || "",
-            gender: emsPt.gender || "male",
-            age: emsPt.age ? String(emsPt.age) : "",
-            blood_group: "",
-            road: "-",
-            phone: emsPt.phone || "",
-            address: emsPt.address_full || "",
-            village_name: "บุคคลนอกเขต",
-            nationality: emsPt.nationality || "ไทย",
-            latitude: null,
-            longitude: null,
-            is_deceased: false,
-          };
-
-          return NextResponse.json({
-            found: true,
-            total: 1,
-            hasMore: false,
-            patients: [emsFormatted],
-            data: emsFormatted,
-            source: "TEMPORARY",
-          });
-        }
+      } else {
+        searchConditions.push({
+          OR: [
+            { fname: { contains: query } },
+            { lname: { contains: query } },
+            { hn: { contains: query } },
+            { cid: { contains: query } },
+          ],
+        });
       }
-
-      return NextResponse.json({
-        found: false,
-        total: 0,
-        hasMore: false,
-        patients: [],
-        message: "ไม่พบข้อมูลประวัติผู้ป่วย",
-      });
     }
 
-    const rawPatients = await prisma.patient.findMany({
-      where: whereClause,
-      take: 30,
-      orderBy: { hn: "desc" },
+    const where: any = {
+      ...locationCondition,
+    };
+
+    if (searchConditions.length > 0) {
+      where.AND = searchConditions;
+    }
+
+    // 🌟 นับจำนวนรวมจริงใน DB (totalCount) พร้อมดึงข้อมูลจำกัดตาม SEARCH_LIMIT
+    const [totalCount, patients, villages] = await Promise.all([
+      prisma.patient.count({ where }),
+      prisma.patient.findMany({
+        where,
+        take: SEARCH_LIMIT,
+        select: {
+          hn: true,
+          cid: true,
+          pname: true,
+          fname: true,
+          lname: true,
+          sex: true,
+          birthday: true,
+          moopart: true,
+          road: true,
+          addrpart: true,
+          address_full: true,
+          mobile_phone_number: true,
+          hometel: true,
+          death: true,
+          pttype: true,
+          home_latitude: true,
+          home_longitude: true,
+        },
+        orderBy: {
+          hn: "desc",
+        },
+      }),
+      prisma.village.findMany({
+        select: {
+          village_moo: true,
+          village_name: true,
+        },
+      }).catch(() => []),
+    ]);
+
+    const villageMap = new Map<string, string>();
+    villages.forEach((v: any) => {
+      if (v.village_moo !== null && v.village_moo !== undefined) {
+        const vMoo = String(v.village_moo).trim();
+        villageMap.set(vMoo, v.village_name);
+        villageMap.set(String(parseInt(vMoo, 10)), v.village_name);
+      }
     });
 
-    const formattedList = await Promise.all(
-      rawPatients.map((pt) => formatHospitalPatient(pt))
+    const formattedPatients = await Promise.all(
+      patients.map(async (pt) => {
+        const ptMoo = pt.moopart ? pt.moopart.trim() : "";
+        const villageName =
+          villageMap.get(ptMoo) ||
+          villageMap.get(String(parseInt(ptMoo, 10))) ||
+          (ptMoo ? `หมู่ที่ ${ptMoo}` : "บุคคลนอกเขต");
+
+        let age = null;
+        if (pt.birthday) {
+          const birthDate = new Date(pt.birthday);
+          const ageDifMs = Date.now() - birthDate.getTime();
+          const ageDate = new Date(ageDifMs);
+          age = Math.abs(ageDate.getUTCFullYear() - 1970);
+        }
+
+        const lat = pt.home_latitude ? parseFloat(String(pt.home_latitude)) : null;
+        const lng = pt.home_longitude ? parseFloat(String(pt.home_longitude)) : null;
+        const imageUrl = await ensurePatientImage(pt.hn);
+
+        return {
+          source: "HOSPITAL",
+          hn: pt.hn,
+          cid: pt.cid || "",
+          pname: pt.pname || "",
+          fname: pt.fname || "",
+          lname: pt.lname || "",
+          gender: pt.sex || "1",
+          age: age,
+          phone: pt.mobile_phone_number || pt.hometel || "",
+          road: pt.road || "",
+          village_name: villageName,
+          address:
+            pt.address_full?.trim() ||
+            `${pt.addrpart ? `${pt.addrpart} ` : ""}${pt.moopart ? `ม.${pt.moopart} ` : ""}${pt.road ? `ถ.${pt.road} ` : ""}ต.ในเมือง อ.เมืองลำพูน`,
+          is_deceased: pt.death === "Y",
+          insurance_type: pt.pttype || "UC",
+          latitude: !isNaN(lat as number) ? lat : null,
+          longitude: !isNaN(lng as number) ? lng : null,
+          imageUrl: imageUrl,
+        };
+      })
     );
 
     return NextResponse.json({
-      found: true,
-      total: totalCount,
-      hasMore: totalCount > 30,
-      patients: formattedList,
-      data: formattedList.length === 1 ? formattedList[0] : undefined,
-      source: formattedList.length === 1 ? "HOSPITAL" : undefined,
+      success: true,
+      found: formattedPatients.length > 0,
+      total: totalCount, // 🌟 จำนวนทั้งหมดที่ค้นพบในฐานข้อมูลจริง
+      displayed: formattedPatients.length, // จำนวนที่ตัดมาแสดง
+      limit: SEARCH_LIMIT, // เพดาน Limit
+      isExceeded: totalCount > SEARCH_LIMIT, // แฟล็กบอกว่าเกิน Limit หรือไม่
+      patients: formattedPatients,
     });
   } catch (error: any) {
     console.error("Patient search error:", error);
     return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดในการค้นหาข้อมูลผู้ป่วย" },
+      {
+        success: false,
+        error: error?.message || "เกิดข้อผิดพลาดในการค้นหาผู้ป่วย",
+      },
       { status: 500 }
     );
   }

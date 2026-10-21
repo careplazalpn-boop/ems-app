@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { 
   Search, 
@@ -53,6 +53,9 @@ interface Patient {
 
 export default function PatientsPage() {
   const [query, setQuery] = useState("");
+  const [selectedVillageMoo, setSelectedVillageMoo] = useState("all");
+  const [villagesList, setVillagesList] = useState<any[]>([]);
+
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -74,6 +77,22 @@ export default function PatientsPage() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
+  // ดึงรายชื่อชุมชนจากตาราง village
+  useEffect(() => {
+    async function loadVillages() {
+      try {
+        const res = await fetch("/api/villages");
+        const data = await res.json();
+        if (res.ok && data.villages) {
+          setVillagesList(data.villages);
+        }
+      } catch (err) {
+        console.error("Load villages error:", err);
+      }
+    }
+    loadVillages();
+  }, []);
+
   const calculateAge = (birthday: string | null) => {
     if (!birthday) return "-";
     const birthDate = new Date(birthday);
@@ -89,14 +108,14 @@ export default function PatientsPage() {
     return !isNaN(numLat) && !isNaN(numLng) && numLat !== 0 && numLng !== 0;
   };
 
-  const fetchPatients = async (searchQuery: string, pageNum: number, limitNum: number) => {
-    if (!searchQuery.trim()) return;
+  const fetchPatients = async (searchQuery: string, villageMoo: string, pageNum: number, limitNum: number) => {
+    if (!searchQuery.trim() && villageMoo === "all") return;
 
     setLoading(true);
     setSearched(true);
     try {
       const res = await fetch(
-        `/api/patients?q=${encodeURIComponent(searchQuery.trim())}&page=${pageNum}&limit=${limitNum}`
+        `/api/patients?q=${encodeURIComponent(searchQuery.trim())}&moo=${villageMoo}&page=${pageNum}&limit=${limitNum}`
       );
       const data = await res.json();
       if (res.ok) {
@@ -121,29 +140,27 @@ export default function PatientsPage() {
   const handleSearch = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setPage(1);
-    fetchPatients(query, 1, limit);
+    fetchPatients(query, selectedVillageMoo, 1, limit);
   };
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
     setPage(newPage);
-    fetchPatients(query, newPage, limit);
+    fetchPatients(query, selectedVillageMoo, newPage, limit);
   };
 
   const handleLimitChange = (newLimit: number) => {
     setLimit(newLimit);
     setPage(1);
-    fetchPatients(query, 1, newLimit);
+    fetchPatients(query, selectedVillageMoo, 1, newLimit);
   };
 
   // กรองข้อมูลตามเงื่อนไขที่เลือก (ในเขต / นอกเขต / มีพิกัด)
   const filteredPatients = useMemo(() => {
     return patients.filter((p) => {
-      // กรองตามเขต
       if (regionFilter === "IN" && !p.isInRegion) return false;
       if (regionFilter === "OUT" && p.isInRegion) return false;
 
-      // กรองตามพิกัด
       const hasCoords = hasValidCoordinates(p.home_latitude, p.home_longitude);
       if (mapFilter === "HAS_MAP" && !hasCoords) return false;
       if (mapFilter === "NO_MAP" && hasCoords) return false;
@@ -219,9 +236,6 @@ export default function PatientsPage() {
 
   const handleMouseUp = () => setIsDragging(false);
 
-  const fromRecord = total === 0 ? 0 : (page - 1) * limit + 1;
-  const toRecord = Math.min(page * limit, total);
-
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto space-y-5 pb-12">
@@ -230,13 +244,31 @@ export default function PatientsPage() {
             ค้นหาข้อมูลประวัติผู้ป่วย
           </h1>
           <p className="text-xs sm:text-sm text-zinc-500 mt-1">
-            ค้นหาข้อมูลตามชื่อ-นามสกุล, เลขประจำตัวประชาชน, เลข HN หรือบ้านเลขที่
+            ค้นหาข้อมูลตามชื่อ-นามสกุล, เลขประจำตัวประชาชน, เลข HN, บ้านเลขที่ พร้อมระบุชุมชน
           </p>
         </div>
 
-        {/* กล่องค้นหา */}
+        {/* กล่องค้นหา (เพิ่มช่องเลือกชุมชน) */}
         <div className="bg-white p-3 sm:p-4 rounded-2xl border border-zinc-200/90 shadow-xs">
-          <form onSubmit={handleSearch} className="flex gap-2 sm:gap-3">
+          <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-2 sm:gap-3">
+            {/* ตัวเลือกชุมชน */}
+            <div className="relative md:w-64">
+              <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" />
+              <select
+                value={selectedVillageMoo}
+                onChange={(e) => setSelectedVillageMoo(e.target.value)}
+                className="w-full h-11 pl-10 pr-3 rounded-xl border border-zinc-200 bg-zinc-50/50 text-xs sm:text-sm font-semibold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 cursor-pointer"
+              >
+                <option value="all">🏘️ ทุกชุมชน (ทั้งหมด)</option>
+                {villagesList.map((v) => (
+                  <option key={v.village_moo} value={v.village_moo}>
+                    ม.{v.village_moo} {v.village_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* ช่องกรอกข้อความค้นหา */}
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
               <Input
@@ -260,18 +292,19 @@ export default function PatientsPage() {
                 </button>
               )}
             </div>
+
             <Button
               type="submit"
-              disabled={loading || !query.trim()}
-              className="bg-orange-600 hover:bg-orange-700 text-white rounded-xl h-11 px-5 gap-2 shadow-xs cursor-pointer font-medium"
+              disabled={loading || (!query.trim() && selectedVillageMoo === "all")}
+              className="bg-orange-600 hover:bg-orange-700 text-white rounded-xl h-11 px-6 gap-2 shadow-xs cursor-pointer font-medium"
             >
               <Search className="h-4 w-4" />
-              <span className="hidden sm:inline">ค้นหา</span>
+              <span>ค้นหา</span>
             </Button>
           </form>
         </div>
 
-        {/* แถบตัวกรองเพิ่มเติม (Filter Chips) จะแสดงเมื่อมีการค้นหาและมีข้อมูล */}
+        {/* แถบตัวกรองเพิ่มเติม (Filter Chips) */}
         {searched && patients.length > 0 && (
           <div className="bg-white p-3.5 rounded-2xl border border-zinc-200/80 shadow-2xs space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -280,7 +313,6 @@ export default function PatientsPage() {
                 <span>ตัวกรองผลลัพธ์:</span>
               </div>
 
-              {/* ปุ่มเคลียร์ตัวกรอง */}
               {(regionFilter !== "ALL" || mapFilter !== "ALL") && (
                 <button
                   type="button"
@@ -296,7 +328,6 @@ export default function PatientsPage() {
             </div>
 
             <div className="flex flex-wrap gap-2 pt-0.5">
-              {/* กลุ่มตัวกรองพื้นที่รับผิดชอบ */}
               <div className="inline-flex rounded-xl bg-zinc-100 p-1 border border-zinc-200/70">
                 <button
                   type="button"
@@ -334,7 +365,6 @@ export default function PatientsPage() {
                 </button>
               </div>
 
-              {/* กลุ่มตัวกรองพิกัด GPS */}
               <div className="inline-flex rounded-xl bg-zinc-100 p-1 border border-zinc-200/70">
                 <button
                   type="button"
@@ -411,7 +441,7 @@ export default function PatientsPage() {
             <AlertCircle className="h-10 w-10 text-zinc-300 mx-auto mb-2" />
             <p className="text-zinc-700 font-semibold text-base">ไม่พบข้อมูลตามเงื่อนไขตัวกรอง</p>
             <p className="text-xs text-zinc-400 mt-1">
-              ลองเลือกตัวกรองเป็น "ทุกพื้นที่" หรือ "พิกัดทั้งหมด" เพื่อดูรายการอื่น
+              ลองเลือกตัวกรองเป็น "ทุกชุมชน" หรือ "ทุกพื้นที่" เพื่อดูรายการอื่น
             </p>
           </div>
         ) : (
@@ -428,7 +458,6 @@ export default function PatientsPage() {
                     className="bg-white rounded-2xl border border-zinc-200/80 p-4 sm:p-5 shadow-xs hover:border-orange-300 transition-all flex flex-col justify-between gap-4"
                   >
                     <div className="flex gap-4 items-start">
-                      {/* รูปภาพ */}
                       <div
                         onClick={() => openModal({ url: p.imageUrl, title: fullName, hn: p.hn })}
                         className="group relative h-20 w-20 sm:h-24 sm:w-24 rounded-2xl overflow-hidden bg-zinc-100 border border-zinc-200 shrink-0 cursor-pointer shadow-2xs"
@@ -454,14 +483,12 @@ export default function PatientsPage() {
                         )}
                       </div>
 
-                      {/* ข้อมูลประจำตัว */}
                       <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 border border-orange-200">
                             HN: {p.hn}
                           </span>
 
-                          {/* แสดงป้ายชื่อชุมชน */}
                           <span
                             className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
                               p.isInRegion
@@ -485,7 +512,7 @@ export default function PatientsPage() {
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
-                              title={`พิกัด: ${p.home_latitude}, ${p.home_longitude} (คลิกเพื่อนำทางด้วย Google Maps)`}
+                              title={`พิกัด: ${p.home_latitude}, ${p.home_longitude}`}
                             >
                               <Navigation className="h-3 w-3 text-emerald-600 shrink-0" />
                               <span>มีพิกัด</span>
@@ -514,7 +541,6 @@ export default function PatientsPage() {
                       </div>
                     </div>
 
-                    {/* ที่อยู่และปุ่มจัดการ */}
                     <div className="pt-3 border-t border-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="text-xs text-zinc-600 flex items-start gap-1.5 min-w-0">
                         <MapPin className="h-3.5 w-3.5 text-zinc-400 shrink-0 mt-0.5" />

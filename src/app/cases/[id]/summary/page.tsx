@@ -28,6 +28,9 @@ import {
   Users,
   FileText,
   Calendar,
+  Thermometer,
+  Gauge,
+  Eye,
   Check,
 } from "lucide-react";
 
@@ -39,7 +42,9 @@ function CaseSummaryContent() {
   const [loading, setLoading] = useState(true);
   const [caseData, setCaseData] = useState<any>(null);
   const [hospitalPt, setHospitalPt] = useState<any>(null);
-  const [attachments, setAttachments] = useState<any[]>([]);
+  const [dispatchInfo, setDispatchInfo] = useState<any>(null);
+  const [treatmentsList, setTreatmentsList] = useState<any[]>([]);
+  const [attachmentsList, setAttachmentsList] = useState<any[]>([]);
   const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
@@ -50,10 +55,14 @@ function CaseSummaryContent() {
         const res = await fetch(`/api/cases/${id}?t=${Date.now()}`);
         const data = await res.json();
 
-        if (res.ok && data.success) {
-          setCaseData(data.case);
-          setHospitalPt(data.hospital_patient);
-          setAttachments(data.case.attachments || []);
+        if (res.ok && (data.success || data.case)) {
+          const c = data.case || data.data || data;
+          setCaseData(c);
+          setHospitalPt(data.hospital_patient || null);
+          setDispatchInfo(data.latest_dispatch || null);
+          // ดึง treatments และ attachments จากก้อนที่ API ส่งมา
+          setTreatmentsList(data.treatments || c.treatments || []);
+          setAttachmentsList(data.attachments || c.attachments || []);
         }
       } catch (err) {
         console.error("Error loading summary:", err);
@@ -179,7 +188,7 @@ function CaseSummaryContent() {
     );
   }
 
-  // 1. จัดการชื่อและ HN ผู้ป่วย
+  // 1. ประมวลผลชื่อและ HN
   let ptName = "ไม่ระบุชื่อ / นิรนาม";
   let ptHnDisplay = "-";
 
@@ -200,30 +209,22 @@ function CaseSummaryContent() {
     ptName = caseData.caller_name;
   }
 
-  // 2. ข้อมูลการสั่งการและทีมงาน (A)
-  const latestDispatch = caseData.dispatches?.[0] || null;
-  const vehicleInfo = latestDispatch?.vehicle || null;
-  const staffsList = latestDispatch?.staffs || [];
+  // 2. ดึงข้อมูลการรักษาล่าสุด (Treatment)
+  const treatment = treatmentsList[0] || null;
 
-  const teamLeader = staffsList.find(
-    (s: any) =>
-      s.role_type?.toLowerCase() === "leader" ||
-      s.role_type?.toLowerCase() === "team_leader" ||
-      s.note?.toLowerCase() === "leader"
-  );
+  // แปลงความดันโลหิต (sbp / dbp)
+  const bpDisplay = treatment?.sbp || treatment?.dbp 
+    ? `${treatment?.sbp || "-"}/${treatment?.dbp || "-"} mmHg` 
+    : treatment?.blood_pressure || "-";
 
-  const driver = staffsList.find(
-    (s: any) =>
-      s.role_type?.toLowerCase() === "driver" ||
-      s.note?.toLowerCase() === "driver"
-  );
+  // รวมคะแนน GCS
+  const gcsTotal = (treatment?.gcs_e || 0) + (treatment?.gcs_v || 0) + (treatment?.gcs_m || 0);
 
-  const assistants = staffsList.filter(
-    (s: any) => s !== teamLeader && s !== driver
-  );
-
-  // 3. ข้อมูลการประเมินและการปฐมพยาบาล (B)
-  const latestTreatment = caseData.treatments?.[0] || null;
+  // 3. ข้อมูลรถและทีมปฏิบัติการ (Dispatch)
+  const vehicleObj = dispatchInfo?.vehicle || null;
+  const leaderName = dispatchInfo?.leader_name || (dispatchInfo?.leader_id ? `เจ้าหน้าที่ ID: ${dispatchInfo.leader_id}` : "ยังไม่ระบุหัวหน้าชุด");
+  const driverName = dispatchInfo?.driver_name || (dispatchInfo?.driver_id ? `เจ้าหน้าที่ ID: ${dispatchInfo.driver_id}` : "ยังไม่ระบุพนักงานขับรถ");
+  const membersList = dispatchInfo?.members || [];
 
   const hasCoordinates = Boolean(
     caseData.latitude &&
@@ -233,8 +234,8 @@ function CaseSummaryContent() {
 
   return (
     <AppLayout>
-      <div className="w-full max-w-6xl mx-auto space-y-6 pb-24">
-        {/* Header แถบบน: Action Buttons (C: รองรับ Responsive) */}
+      <div className="w-full space-y-6 pb-24">
+        {/* Header Action Bar */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-zinc-200/80 shadow-xs print:hidden">
           <div className="flex items-center gap-3">
             <Link
@@ -303,9 +304,9 @@ function CaseSummaryContent() {
           </div>
         </div>
 
-        {/* Grid แสดงผล 3 คอลัมน์ (C: Responsive Grid) */}
+        {/* Grid แสดงผล 3 คอลัมน์ */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ส่วนข้อมูลผู้ป่วย (คอลัมน์ซ้าย) */}
+          {/* ข้อมูลผู้ป่วย (คอลัมน์ซ้าย) */}
           <div className="space-y-6">
             <Card className="rounded-2xl border-sky-100 shadow-sm overflow-hidden bg-white">
               <div className="h-1.5 bg-gradient-to-r from-sky-400 to-blue-600" />
@@ -356,7 +357,11 @@ function CaseSummaryContent() {
                     <div>
                       <span className="text-zinc-400 block text-[11px]">อายุ</span>
                       <span className="font-medium text-zinc-800">
-                        {caseData.ems_patient?.age ? `${caseData.ems_patient.age} ปี` : "-"}
+                        {hospitalPt?.birthday
+                          ? `${new Date().getFullYear() - new Date(hospitalPt.birthday).getFullYear()} ปี`
+                          : caseData.ems_patient?.age
+                          ? `${caseData.ems_patient.age} ปี`
+                          : "-"}
                       </span>
                     </div>
                   </div>
@@ -364,22 +369,23 @@ function CaseSummaryContent() {
                   <div>
                     <span className="text-zinc-400 block text-[11px]">เบอร์โทรศัพท์</span>
                     <span className="font-medium text-zinc-800">
-                      {caseData.ems_patient?.patient_phone || caseData.caller_phone || "-"}
+                      {hospitalPt?.mobile_phone_number || caseData.ems_patient?.patient_phone || caseData.caller_phone || "-"}
                     </span>
                   </div>
 
                   <div>
                     <span className="text-zinc-400 block text-[11px]">สิทธิการรักษา</span>
                     <span className="font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                      {caseData.insurance_type || "UC (บัตรทอง)"}
+                      {hospitalPt?.pttype || caseData.insurance_type || "UC (บัตรทอง)"}
                     </span>
                   </div>
 
                   <div>
                     <span className="text-zinc-400 block text-[11px]">ที่อยู่ตามประวัติ</span>
                     <span className="text-zinc-700 leading-relaxed block">
-                      {caseData.ems_patient?.patient_address ||
-                        hospitalPt?.address ||
+                      {hospitalPt?.address_full ||
+                        caseData.ems_patient?.patient_address ||
+                        caseData.incident_address ||
                         "ไม่ระบุที่อยู่"}
                     </span>
                   </div>
@@ -453,7 +459,7 @@ function CaseSummaryContent() {
                   <span className="text-zinc-400 block text-[11px] mb-2 font-semibold">
                     1. ข้อมูลรถพยาบาลที่ออกเหตุ
                   </span>
-                  {vehicleInfo ? (
+                  {vehicleObj ? (
                     <div className="p-3.5 rounded-xl border border-sky-200 bg-sky-50/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold">
@@ -461,15 +467,15 @@ function CaseSummaryContent() {
                         </div>
                         <div>
                           <span className="font-bold text-sm text-zinc-900 block">
-                            ทะเบียน: {vehicleInfo.plate_number}
+                            ทะเบียน: {vehicleObj.plate_number}
                           </span>
                           <span className="text-zinc-500 text-[11px]">
-                            รุ่น/ยี่ห้อ: {vehicleInfo.model || vehicleInfo.brand || "รถพยาบาลกู้ชีพ"}
+                            ประเภท: {vehicleObj.vehicle_type} ({vehicleObj.brand || "EMS"})
                           </span>
                         </div>
                       </div>
                       <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-[11px] border border-emerald-200 self-start sm:self-auto">
-                        สถานะ: {vehicleInfo.status || "พร้อมปฏิบัติการ"}
+                        สถานะ: {vehicleObj.status || "พร้อมปฏิบัติการ"}
                       </span>
                     </div>
                   ) : (
@@ -489,12 +495,9 @@ function CaseSummaryContent() {
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span className="font-bold text-zinc-900 text-xs">
-                        {teamLeader?.user?.fullname || "ยังไม่ระบุหัวหน้าชุด"}
+                        {leaderName}
                       </span>
                     </div>
-                    <span className="text-[10px] text-zinc-500 block pl-6">
-                      {teamLeader?.user?.role ? `(ตำแหน่ง: ${teamLeader.user.role})` : ""}
-                    </span>
                   </div>
 
                   {/* 3. พนักงานขับรถ */}
@@ -505,12 +508,9 @@ function CaseSummaryContent() {
                     <div className="flex items-center gap-2">
                       <Car className="w-4 h-4 text-sky-600 shrink-0" />
                       <span className="font-bold text-zinc-900 text-xs">
-                        {driver?.user?.fullname || "ยังไม่ระบุพนักงานขับรถ"}
+                        {driverName}
                       </span>
                     </div>
-                    <span className="text-[10px] text-zinc-500 block pl-6">
-                      {driver?.user?.role ? `(ตำแหน่ง: ${driver.user.role})` : ""}
-                    </span>
                   </div>
 
                   {/* 4. ผู้ร่วมปฏิบัติการ */}
@@ -521,8 +521,8 @@ function CaseSummaryContent() {
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 text-purple-600 shrink-0" />
                       <span className="font-bold text-zinc-900 text-xs">
-                        {assistants.length > 0
-                          ? assistants.map((a: any) => a.user?.fullname).join(", ")
+                        {membersList.length > 0
+                          ? membersList.map((m: any) => m.name).join(", ")
                           : "ไม่มีผู้ร่วมปฏิบัติการ"}
                       </span>
                     </div>
@@ -530,29 +530,23 @@ function CaseSummaryContent() {
                 </div>
 
                 {/* เวลาปฏิบัติการ */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-zinc-100 text-[11px]">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-zinc-100 text-[11px]">
                   <div>
-                    <span className="text-zinc-400 block">สั่งการ:</span>
+                    <span className="text-zinc-400 block">เวลาสั่งการ:</span>
                     <span className="font-medium text-zinc-800">
-                      {latestDispatch?.dispatched_at ? formatThaiDateTime(latestDispatch.dispatched_at) : "-"}
+                      {dispatchInfo?.time_dispatched ? formatThaiDateTime(dispatchInfo.time_dispatched) : "-"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-400 block">ถึงที่เกิดเหตุ:</span>
+                    <span className="text-zinc-400 block">เวลาถึงที่เกิดเหตุ:</span>
                     <span className="font-medium text-zinc-800">
-                      {latestDispatch?.on_scene_at ? formatThaiDateTime(latestDispatch.on_scene_at) : "-"}
+                      {dispatchInfo?.time_on_scene ? formatThaiDateTime(dispatchInfo.time_on_scene) : "-"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-400 block">ออกจากที่เกิดเหตุ:</span>
+                    <span className="text-zinc-400 block">เวลาถึงโรงพยาบาล:</span>
                     <span className="font-medium text-zinc-800">
-                      {latestDispatch?.depart_scene_at ? formatThaiDateTime(latestDispatch.depart_scene_at) : "-"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-400 block">ถึงโรงพยาบาล:</span>
-                    <span className="font-medium text-zinc-800">
-                      {latestDispatch?.hospital_at ? formatThaiDateTime(latestDispatch.hospital_at) : "-"}
+                      {dispatchInfo?.time_hospital ? formatThaiDateTime(dispatchInfo.time_hospital) : "-"}
                     </span>
                   </div>
                 </div>
@@ -570,71 +564,125 @@ function CaseSummaryContent() {
               </CardHeader>
 
               <CardContent className="p-5 text-xs space-y-5">
-                {/* สัญญาณชีพ (Vital Signs) */}
-                <div>
-                  <span className="text-zinc-500 font-bold block mb-2 flex items-center gap-1.5">
-                    <Activity className="w-3.5 h-3.5 text-rose-500" />
-                    <span>สัญญาณชีพและการประเมินแรกรับ (Vital Signs)</span>
-                  </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200 text-center">
-                      <span className="text-zinc-400 text-[10px] block">ความดันโลหิต (BP)</span>
-                      <span className="font-bold text-zinc-800 text-sm">
-                        {latestTreatment?.blood_pressure || latestTreatment?.bp || "-"} mmHg
+                {treatment ? (
+                  <>
+                    {/* สัญญาณชีพ (Vital Signs) */}
+                    <div>
+                      <span className="text-zinc-500 font-bold block mb-2 flex items-center gap-1.5">
+                        <Activity className="w-3.5 h-3.5 text-rose-500" />
+                        <span>สัญญาณชีพและการประเมินแรกรับ (Vital Signs)</span>
                       </span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
+                        <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-center">
+                          <span className="text-zinc-400 text-[10px] block">ความดัน (BP)</span>
+                          <span className="font-bold text-zinc-800 text-xs sm:text-sm">
+                            {bpDisplay}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-center">
+                          <span className="text-zinc-400 text-[10px] block">ชีพจร (PR)</span>
+                          <span className="font-bold text-zinc-800 text-xs sm:text-sm">
+                            {treatment.pulse_rate || "-"} bpm
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-center">
+                          <span className="text-zinc-400 text-[10px] block">การหายใจ (RR)</span>
+                          <span className="font-bold text-zinc-800 text-xs sm:text-sm">
+                            {treatment.respiratory_rate || "-"} /min
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-center">
+                          <span className="text-zinc-400 text-[10px] block">ออกซิเจน (SpO2)</span>
+                          <span className="font-bold text-emerald-600 text-xs sm:text-sm">
+                            {treatment.spo2 || "-"} %
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-center">
+                          <span className="text-zinc-400 text-[10px] block">อุณหภูมิ (Temp)</span>
+                          <span className="font-bold text-amber-600 text-xs sm:text-sm">
+                            {treatment.temperature ? `${treatment.temperature} °C` : "-"}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-center">
+                          <span className="text-zinc-400 text-[10px] block">น้ำตาล (DTX)</span>
+                          <span className="font-bold text-sky-600 text-xs sm:text-sm">
+                            {treatment.dtx ? `${treatment.dtx} mg/dL` : "-"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200 text-center">
-                      <span className="text-zinc-400 text-[10px] block">ชีพจร (Pulse)</span>
-                      <span className="font-bold text-zinc-800 text-sm">
-                        {latestTreatment?.pulse_rate || latestTreatment?.pr || "-"} bpm
-                      </span>
-                    </div>
-                    <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200 text-center">
-                      <span className="text-zinc-400 text-[10px] block">การหายใจ (RR)</span>
-                      <span className="font-bold text-zinc-800 text-sm">
-                        {latestTreatment?.respiratory_rate || latestTreatment?.rr || "-"} /min
-                      </span>
-                    </div>
-                    <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200 text-center">
-                      <span className="text-zinc-400 text-[10px] block">ออกซิเจนในเลือด (SpO2)</span>
-                      <span className="font-bold text-emerald-600 text-sm">
-                        {latestTreatment?.oxygen_sat || latestTreatment?.spo2 || "-"} %
-                      </span>
-                    </div>
-                  </div>
-                </div>
 
-                {/* การปฐมพยาบาลเบื้องต้น (Procedures & Treatment) */}
-                <div>
-                  <span className="text-zinc-500 font-bold block mb-1.5 flex items-center gap-1.5">
-                    <Stethoscope className="w-3.5 h-3.5 text-sky-600" />
-                    <span>การปฐมพยาบาลเบื้องต้นและการรักษา ณ จุดเกิดเหตุ</span>
-                  </span>
-                  <div className="p-3.5 rounded-xl bg-zinc-50/70 border border-zinc-200 text-zinc-800 leading-relaxed font-medium">
-                    {latestTreatment?.treatment_summary ||
-                      latestTreatment?.procedures ||
-                      latestTreatment?.initial_treatment ||
-                      "ไม่มีการบันทึกการรักษา หรืออยู่ระหว่างการดูแลรักษาทั่วไป"}
-                  </div>
-                </div>
+                    {/* การประเมินทางระบบประสาท & รูม่านตา */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-zinc-50/70 border border-zinc-200">
+                      <div>
+                        <span className="text-zinc-400 text-[10px] block">ระดับความรู้สึกตัว</span>
+                        <span className="font-bold text-zinc-800">
+                          {treatment.consciousness || "ไม่ระบุ"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-400 text-[10px] block">GCS Score (E+V+M)</span>
+                        <span className="font-bold text-zinc-800">
+                          {gcsTotal > 0 ? `${gcsTotal} คะแนน (E${treatment.gcs_e} V${treatment.gcs_v} M${treatment.gcs_m})` : "-"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-400 text-[10px] block">รูม่านตา (Pupil R / L)</span>
+                        <span className="font-bold text-zinc-800">
+                          {treatment.pupil_right || "-"} / {treatment.pupil_left || "-"}
+                        </span>
+                      </div>
+                    </div>
 
-                {/* ผลลัพธ์และ รพ. ปลายทาง */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                  <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
-                    <span className="text-emerald-700 block text-[11px] font-semibold">สถานะ / ผลลัพธ์การดูแล</span>
-                    <span className="text-base font-bold text-emerald-900 mt-0.5 block">
-                      {latestTreatment?.initial_outcome || "กำลังดำเนินการ"}
-                    </span>
-                  </div>
+                    {/* หัตถการและการรักษา */}
+                    <div>
+                      <span className="text-zinc-500 font-bold block mb-1.5 flex items-center gap-1.5">
+                        <Stethoscope className="w-3.5 h-3.5 text-sky-600" />
+                        <span>การจัดการและการปฐมพยาบาลเบื้องต้น</span>
+                      </span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div className="p-2 rounded-lg bg-zinc-50 border border-zinc-200">
+                          <span className="text-zinc-400 text-[10px] block">ทางเดินหายใจ:</span>
+                          <span className="font-semibold text-zinc-800">{treatment.airway_management || "ไม่"}</span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-zinc-50 border border-zinc-200">
+                          <span className="text-zinc-400 text-[10px] block">การห้ามเลือด/ทำแผล:</span>
+                          <span className="font-semibold text-zinc-800">{treatment.wound_management || "ไม่"}</span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-zinc-50 border border-zinc-200">
+                          <span className="text-zinc-400 text-[10px] block">การดามกระดูก:</span>
+                          <span className="font-semibold text-zinc-800">{treatment.splint_management || "ไม่"}</span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-zinc-50 border border-zinc-200">
+                          <span className="text-zinc-400 text-[10px] block">การทำ CPR:</span>
+                          <span className="font-semibold text-zinc-800">{treatment.cpr_performed ? "มีการทำ CPR" : "ไม่มี"}</span>
+                        </div>
+                      </div>
+                    </div>
 
-                  <div className="p-3.5 rounded-xl bg-sky-50 border border-sky-200">
-                    <span className="text-sky-700 block text-[11px] font-semibold">โรงพยาบาลปลายทางที่นำส่ง</span>
-                    <span className="text-base font-bold text-sky-900 mt-0.5 block flex items-center gap-1.5">
-                      <Building2 className="w-4 h-4 text-sky-600" />
-                      {latestTreatment?.destination_hospital || "ไม่ได้ส่งต่อ รพ."}
-                    </span>
+                    {/* ผลลัพธ์และ รพ. ปลายทาง */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                      <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
+                        <span className="text-emerald-700 block text-[11px] font-semibold">สถานะ / ผลลัพธ์การดูแล</span>
+                        <span className="text-base font-bold text-emerald-900 mt-0.5 block">
+                          {treatment.initial_outcome || "คงเดิม/คงที่"}
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-sky-50 border border-sky-200">
+                        <span className="text-sky-700 block text-[11px] font-semibold">โรงพยาบาลปลายทางที่นำส่ง</span>
+                        <span className="text-base font-bold text-sky-900 mt-0.5 block flex items-center gap-1.5">
+                          <Building2 className="w-4 h-4 text-sky-600" />
+                          {treatment.destination_hospital || "ไม่ได้ส่งต่อ รพ."}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-4 rounded-xl bg-zinc-50 text-center text-zinc-400 italic">
+                    ยังไม่มีการบันทึกข้อมูลการรักษาและการประเมินอาการ
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
 
@@ -643,7 +691,7 @@ function CaseSummaryContent() {
               <CardHeader className="py-4 px-5 bg-zinc-50/70 border-b border-zinc-100 flex flex-row items-center justify-between">
                 <CardTitle className="text-sm font-bold text-zinc-900 flex items-center gap-2">
                   <Camera className="w-4 h-4 text-sky-600" />
-                  <span>รูปภาพปฏิบัติงานและหลักฐาน ({attachments.length} รูป)</span>
+                  <span>รูปภาพปฏิบัติงานและหลักฐาน ({attachmentsList.length} รูป)</span>
                 </CardTitle>
                 <Link
                   href={`/cases/${id}/attachments`}
@@ -654,13 +702,13 @@ function CaseSummaryContent() {
               </CardHeader>
 
               <CardContent className="p-5">
-                {attachments.length === 0 ? (
+                {attachmentsList.length === 0 ? (
                   <div className="text-center py-6 text-zinc-400 text-xs">
                     ไม่มีรูปภาพบันทึกในเคสนี้
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {attachments.map((att: any, idx: number) => (
+                    {attachmentsList.map((att: any, idx: number) => (
                       <div
                         key={idx}
                         className="rounded-xl overflow-hidden border border-zinc-200 bg-zinc-100 aspect-video relative group"
