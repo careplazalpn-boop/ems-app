@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/app-layout";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   FileText,
   Calendar,
   Search,
-  Filter,
   RotateCcw,
   Printer,
   ChevronLeft,
@@ -20,30 +18,17 @@ import {
   Clock,
   XCircle,
   Siren,
-  Building2,
   Car,
-  User,
-  ShieldCheck,
   Eye,
   RefreshCw,
   Sparkles,
   Layers,
-  ArrowRight,
-  Check,
 } from "lucide-react";
 
-// ดึงวันที่ปัจจุบัน YYYY-MM-DD
-const getTodayDateString = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-export default function PerformanceReportPage() {
+function PerformanceReportContent() {
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<any[]>([]);
+  const [todayStr, setTodayStr] = useState("");
   const [summary, setSummary] = useState({
     total: 0,
     completed: 0,
@@ -54,9 +39,9 @@ export default function PerformanceReportPage() {
     cancelled: 0,
   });
 
-  // ตัวกรองช่วงเวลา (เริ่มต้นเป็นวันนี้)
-const [startDate, setStartDate] = useState("");
-const [endDate, setEndDate] = useState("");
+  // ค่าเริ่มต้นคือ "ข้อมูลทั้งหมด" (startDate, endDate เป็น "")
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   // ค้นหาผู้รับบริการ (HN, CID, ชื่อ-สกุล)
   const [searchInput, setSearchInput] = useState("");
@@ -71,6 +56,15 @@ const [endDate, setEndDate] = useState("");
   const [limit, setLimit] = useState(10);
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+
+  // คำนวณวันที่ของวันนี้หลังจาก Mount บน Client แล้วเท่านั้น
+  useEffect(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    setTodayStr(`${year}-${month}-${day}`);
+  }, []);
 
   // ดึงข้อมูลรายงาน
   const fetchReportData = useCallback(async () => {
@@ -116,13 +110,29 @@ const [endDate, setEndDate] = useState("");
   };
 
   const handleResetFilters = () => {
-    setStartDate(getTodayDateString());
-    setEndDate(getTodayDateString());
+    setStartDate("");
+    setEndDate("");
     setSearchInput("");
     setSearchQuery("");
     setTriageFilter("all");
     setStatusFilter("all");
     setLimit(10);
+    setPage(1);
+  };
+
+  // ดึงวันปัจจุบันเฉพาะเมื่อกดปุ่ม (Event-driven ไม่กระทบ Prerender)
+  const handleSelectToday = () => {
+    let targetDate = todayStr;
+    if (!targetDate) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const day = String(now.getDate()).padStart(2, "0");
+      targetDate = `${year}-${month}-${day}`;
+      setTodayStr(targetDate);
+    }
+    setStartDate(targetDate);
+    setEndDate(targetDate);
     setPage(1);
   };
 
@@ -133,9 +143,9 @@ const [endDate, setEndDate] = useState("");
   };
 
   const isTodayActive = useMemo(() => {
-    const today = getTodayDateString();
-    return startDate === today && endDate === today;
-  }, [startDate, endDate]);
+    if (!todayStr) return false;
+    return startDate === todayStr && endDate === todayStr;
+  }, [startDate, endDate, todayStr]);
 
   const isAllTimeActive = useMemo(() => {
     return startDate === "" && endDate === "";
@@ -143,10 +153,11 @@ const [endDate, setEndDate] = useState("");
 
   const formatThaiDateTime = (dateString: string) => {
     if (!dateString) return "-";
+    const date = new Date(dateString);
     return new Intl.DateTimeFormat("th-TH", {
       dateStyle: "short",
       timeStyle: "short",
-    }).format(new Date(dateString));
+    }).format(date);
   };
 
   const renderTriageBadge = (level: string) => {
@@ -208,9 +219,8 @@ const [endDate, setEndDate] = useState("");
           </div>
         </div>
 
-        {/* 1. การ์ดสรุปสถิติตามระดับความรุนแรง (Triage Cards) - ผันแปรตามช่วงเวลา */}
+        {/* 1. การ์ดสรุปสถิติตามระดับความรุนแรง (Triage Cards) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {/* ทั้งหมด */}
           <div
             onClick={() => {
               setTriageFilter("all");
@@ -231,7 +241,6 @@ const [endDate, setEndDate] = useState("");
             <div className="text-[10px] opacity-70 mt-0.5">เสร็จสิ้น {summary.completed} เคส</div>
           </div>
 
-          {/* วิกฤต (Red) */}
           <div
             onClick={() => {
               setTriageFilter("red");
@@ -254,7 +263,6 @@ const [endDate, setEndDate] = useState("");
             <div className="text-[10px] opacity-80 mt-0.5">ความเร่งด่วนสูงสุด</div>
           </div>
 
-          {/* เร่งด่วน (Yellow) */}
           <div
             onClick={() => {
               setTriageFilter("yellow");
@@ -275,7 +283,6 @@ const [endDate, setEndDate] = useState("");
             <div className="text-[10px] opacity-80 mt-0.5">การบริบาลฉุกเฉิน</div>
           </div>
 
-          {/* ไม่เร่งด่วน (Green) */}
           <div
             onClick={() => {
               setTriageFilter("green");
@@ -296,7 +303,6 @@ const [endDate, setEndDate] = useState("");
             <div className="text-[10px] opacity-80 mt-0.5">ปฐมพยาบาลเบื้องต้น</div>
           </div>
 
-          {/* ทั่วไป (White) */}
           <div
             onClick={() => {
               setTriageFilter("white");
@@ -317,7 +323,6 @@ const [endDate, setEndDate] = useState("");
             <div className="text-[10px] opacity-80 mt-0.5">ตรวจประเมินทั่วไป</div>
           </div>
 
-          {/* ยกเลิกเคส */}
           <div
             onClick={() => {
               setTriageFilter("all");
@@ -339,18 +344,17 @@ const [endDate, setEndDate] = useState("");
           </div>
         </div>
 
-        {/* 2. กล่องควบคุม: กรองช่วงเวลา + ค้นหาผู้รับบริการ (HN, เลขบัตร, ชื่อ-สกุล) */}
+        {/* 2. กล่องควบคุม: กรองช่วงเวลา + ค้นหาผู้รับบริการ */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-zinc-200/90 shadow-xs print:hidden space-y-3.5">
-          {/* แถวที่ 1: กรองช่วงเวลา */}
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pb-3 border-b border-zinc-100">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
               <span className="text-xs font-bold text-zinc-800">ช่วงเวลาที่รายงาน:</span>
               <span className="text-xs text-zinc-500 font-medium">
-                {isTodayActive
-                  ? "วันนี้"
-                  : isAllTimeActive
-                  ? "ข้อมูลทั้งหมดตั้งแต่เริ่มต้น"
+                {isAllTimeActive
+                  ? "ข้อมูลทั้งหมดตั้งแต่เริ่มต้น (All-time)"
+                  : isTodayActive
+                  ? "ข้อมูลประจำวันนี้"
                   : `${startDate || "เริ่มต้น"} ถึง ${endDate || "ปัจจุบัน"}`}
               </span>
             </div>
@@ -384,12 +388,7 @@ const [endDate, setEndDate] = useState("");
 
               <button
                 type="button"
-                onClick={() => {
-                  const today = getTodayDateString();
-                  setStartDate(today);
-                  setEndDate(today);
-                  setPage(1);
-                }}
+                onClick={handleSelectToday}
                 className={`h-8 px-3 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs ${
                   isTodayActive
                     ? "bg-indigo-600 text-white"
@@ -408,6 +407,7 @@ const [endDate, setEndDate] = useState("");
                     ? "bg-zinc-900 text-white"
                     : "bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50"
                 }`}
+                title="แสดงข้อมูลสถิติและเคสทั้งหมดตั้งแต่เริ่มต้น"
               >
                 <Layers className="w-3.5 h-3.5 text-amber-400" />
                 <span>ข้อมูลทั้งหมด</span>
@@ -415,7 +415,6 @@ const [endDate, setEndDate] = useState("");
             </div>
           </div>
 
-          {/* แถวที่ 2: ช่องค้นหาผู้รับบริการ (HN, CID, ชื่อ-สกุล) & ตัวเลือกแถว */}
           <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
             <div className="md:col-span-7 relative">
               <input
@@ -459,7 +458,7 @@ const [endDate, setEndDate] = useState("");
                 type="button"
                 onClick={handleResetFilters}
                 className="h-10 px-3.5 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
-                title="ล้างค่าตัวกรองทั้งหมด"
+                title="ล้างค่าตัวกรองทั้งหมดเป็นข้อมูลเริ่มต้น"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>รีเซ็ต</span>
@@ -585,7 +584,6 @@ const [endDate, setEndDate] = useState("");
             </div>
           )}
 
-          {/* แถบควบคุมการแบ่งหน้า (Pagination) */}
           {totalPages > 1 && (
             <div className="p-4 border-t border-zinc-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-500 print:hidden">
               <div>
@@ -642,5 +640,20 @@ const [endDate, setEndDate] = useState("");
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+export default function PerformanceReportPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="py-24 text-center space-y-3">
+          <Siren className="w-10 h-10 text-indigo-600 animate-pulse mx-auto" />
+          <p className="text-sm text-zinc-500">กำลังเตรียมรายงานผลการปฏิบัติงาน...</p>
+        </div>
+      }
+    >
+      <PerformanceReportContent />
+    </Suspense>
   );
 }
