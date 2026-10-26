@@ -14,16 +14,35 @@ function PrintContent() {
   const [hospitalPt, setHospitalPt] = useState<any>(null);
   const [dispatchInfo, setDispatchInfo] = useState<any>(null);
   const [treatment, setTreatment] = useState<any>(null);
+  const [officerMap, setOfficerMap] = useState<Map<number, string>>(new Map());
 
   useEffect(() => {
     if (!id) return;
 
     async function loadData() {
       try {
-        const res = await fetch(`/api/cases/${id}?t=${Date.now()}`);
-        const data = await res.json();
+        const [resCase, resOfficers] = await Promise.all([
+          fetch(`/api/cases/${id}?t=${Date.now()}`),
+          fetch(`/api/users`).catch(() => null),
+        ]);
 
-        if (res.ok && (data.success || data.case)) {
+        const data = await resCase.json();
+
+        if (resOfficers && resOfficers.ok) {
+          const offData = await resOfficers.json();
+          const userList = offData.users || offData.data || offData || [];
+          if (Array.isArray(userList)) {
+            const map = new Map<number, string>();
+            userList.forEach((u: any) => {
+              if (u.user_id && u.fullname) {
+                map.set(u.user_id, u.fullname.trim());
+              }
+            });
+            setOfficerMap(map);
+          }
+        }
+
+        if (resCase.ok && (data.success || data.case)) {
           const c = data.case || data.data || data;
           setCaseData(c);
           setHospitalPt(data.hospital_patient || null);
@@ -40,15 +59,6 @@ function PrintContent() {
 
     loadData();
   }, [id]);
-
-  useEffect(() => {
-    if (!loading && caseData) {
-      const timer = setTimeout(() => {
-        window.print();
-      }, 400);
-      return () => clearTimeout(timer);
-    }
-  }, [loading, caseData]);
 
   const formatThaiDateTime = (dateString: string) => {
     if (!dateString) return "-";
@@ -99,9 +109,43 @@ function PrintContent() {
   }
 
   const vehicleObj = dispatchInfo?.vehicle || null;
-  const leaderName = dispatchInfo?.leader_name || "-";
-  const driverName = dispatchInfo?.driver_name || "-";
-  const membersList = dispatchInfo?.members || [];
+
+  // หัวหน้าชุด และ พลขับ (แสดงเฉพาะชื่อจริง ถ้าไม่มีให้แสดงขีด -)
+  const getCleanOfficerName = (rawName: string | undefined, id: number | undefined) => {
+    if (rawName && !rawName.startsWith("เจ้าหน้าที่") && !rawName.startsWith("จนท.")) {
+      return rawName;
+    }
+    if (id && officerMap.has(id)) {
+      return officerMap.get(id)!;
+    }
+    return "-";
+  };
+
+  const leaderName = getCleanOfficerName(dispatchInfo?.leader_name, dispatchInfo?.leader_id);
+  const driverName = getCleanOfficerName(dispatchInfo?.driver_name, dispatchInfo?.driver_id);
+
+  // 🌟 แสดงเฉพาะชื่อ - สกุลจริงของผู้ร่วมปฏิบัติงาน (ตัด "เจ้าหน้าที่ X" ออก)
+  const rawMembers: any[] = dispatchInfo?.members || dispatchInfo?.staffs || [];
+  const memberNames = rawMembers
+    .filter((m: any) => {
+      const isLeader = m.role_type === "team_leader" || m.role_type === "leader" || m.note === "leader";
+      const isDriver = m.role_type === "driver" || m.note === "driver";
+      return !isLeader && !isDriver;
+    })
+    .map((m: any) => {
+      const realName = officerMap.get(m.user_id) || m.fullname || m.name || "";
+      return realName.trim();
+    })
+    .filter((name: string) => {
+      return (
+        name !== "" &&
+        !name.startsWith("เจ้าหน้าที่") &&
+        !name.startsWith("จนท.") &&
+        !/^\d+$/.test(name)
+      );
+    });
+
+  const membersDisplay = memberNames.length > 0 ? memberNames.join(", ") : "-";
 
   const bpDisplay = treatment?.sbp || treatment?.dbp 
     ? `${treatment?.sbp || "-"}/${treatment?.dbp || "-"} mmHg` 
@@ -111,7 +155,6 @@ function PrintContent() {
 
   return (
     <div className="bg-zinc-100 min-h-screen py-4 print:bg-white print:py-0 print:min-h-0 text-black font-sans">
-      {/* 🌟 ล็อคขนาดกระดาษ A4 ไม่ให้แตกหน้า 2 */}
       <style jsx global>{`
         @page {
           size: A4 portrait;
@@ -137,6 +180,11 @@ function PrintContent() {
             height: 100% !important;
             max-height: 280mm !important;
           }
+          .signature-box {
+            margin-top: 32mm !important;
+            padding-top: 6mm !important;
+            page-break-inside: avoid !important;
+          }
         }
       `}</style>
 
@@ -155,14 +203,14 @@ function PrintContent() {
           className="px-4 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer shadow-md"
         >
           <Printer className="w-3.5 h-3.5 text-white" />
-          <span>สั่งพิมพ์ </span>
+          <span>สั่งพิมพ์ / บันทึก PDF (Print)</span>
         </button>
       </div>
 
-      {/* 🌟 ตัวแผ่น A4 (บีบ Margin / Padding และ Font ให้พอดีหน้าเดียว) */}
+      {/* แผ่นกระดาษ A4 */}
       <div className="print-page max-w-[210mm] mx-auto bg-white p-7 shadow-lg border border-zinc-200 box-border text-[10.5px] leading-tight flex flex-col justify-between h-[280mm]">
         <div>
-          {/* ส่วนหัวกระดาษแบบทางการ */}
+          {/* ส่วนหัวกระดาษ */}
           <div className="text-center border-b-2 border-zinc-900 pb-2 mb-2">
             <div className="flex justify-center mb-0.5">
               <Image
@@ -221,8 +269,8 @@ function PrintContent() {
               <div><strong>หัวหน้าชุด:</strong> {leaderName}</div>
               <div><strong>พลขับ:</strong> {driverName}</div>
             </div>
-            <div className="mb-1 text-[10px] text-zinc-700">
-              <strong>ผู้ร่วมปฏิบัติการ:</strong> {membersList.length > 0 ? membersList.map((m: any) => m.name).join(", ") : "-"}
+            <div className="mb-1 text-[10px] text-zinc-800 leading-normal">
+              <strong>ผู้ร่วมปฏิบัติการ:</strong> {membersDisplay}
             </div>
             <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-dashed border-zinc-300 text-[9.5px] text-zinc-600">
               <div>เวลาสั่งการ: {dispatchInfo?.time_dispatched ? formatThaiDateTime(dispatchInfo.time_dispatched) : "-"}</div>
@@ -288,18 +336,19 @@ function PrintContent() {
             )}
           </div>
         </div>
-        <div className="border-t border-zinc-400 pt-2 mt-auto">
-          <div className="grid grid-cols-2 gap-6 text-center text-[10.5px]">
-            <div>
 
-              <div className="mb-6">ลงชื่อ .............................................................. ผู้บันทึก</div>
+        {/* ช่องลงนาม */}
+        <div className="signature-box border-t border-zinc-400 pt-12 mt-10">
+          <div className="grid grid-cols-2 gap-8 text-center text-[10.5px]">
+            <div>
+              <div className="mb-1">ลงชื่อ .............................................................. ผู้บันทึก</div>
               <div>( {driverName !== "-" ? driverName : ".............................................................."} )</div>
-              <div className="text-[9px] text-zinc-500 mt-0.5">เจ้าหน้าที่ปฏิบัติการการแพทย์ฉุกเฉิน</div>
+              <div className="text-[9.5px] text-zinc-500 mt-1">เจ้าหน้าที่ปฏิบัติการการแพทย์ฉุกเฉิน</div>
             </div>
             <div>
-              <div className="mb-6">ลงชื่อ .............................................................. หัวหน้าชุด</div>
+              <div className="mb-1">ลงชื่อ .............................................................. หัวหน้าชุด</div>
               <div>( {leaderName !== "-" ? leaderName : ".............................................................."} )</div>
-              <div className="text-[9px] text-zinc-500 mt-0.5">หัวหน้าชุดปฏิบัติการฉุกเฉิน (ผู้รับรอง)</div>
+              <div className="text-[9.5px] text-zinc-500 mt-1">หัวหน้าชุดปฏิบัติการฉุกเฉิน</div>
             </div>
           </div>
         </div>
