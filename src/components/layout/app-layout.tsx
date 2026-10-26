@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   UserSearch,
+  FileBarChart, // 🌟 ไอคอนสำหรับเมนูรายงาน
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -40,6 +41,8 @@ const menuItems = [
   { title: "รายการเคสฉุกเฉิน", href: "/cases", icon: ClipboardList },
   { title: "แผนที่ติดตามรถพยาบาล", href: "/tracking", icon: MapPin },
   { title: "คลังภาพการปฏิบัติงาน", href: "/gallery", icon: Images },
+  // 🌟 เพิ่มเมนูรายงานผลการปฏิบัติงาน
+  { title: "รายงานผลการปฏิบัติงาน", href: "/reports/performance", icon: FileBarChart },
 ];
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
@@ -214,7 +217,9 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
           <nav className="p-3 space-y-1.5 overflow-y-auto min-h-0">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href;
+              const isActive =
+                pathname === item.href ||
+                (item.href !== "/" && pathname?.startsWith(item.href));
               return (
                 <Link
                   key={item.href}
@@ -373,7 +378,6 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ---------------- EXPORT WRAPPER พร้อม SUSPENSE ----------------
 export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <Suspense
