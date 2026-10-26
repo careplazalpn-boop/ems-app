@@ -308,11 +308,12 @@ function CaseSummaryContent() {
 
           <div className="flex items-center gap-2.5 w-full sm:w-auto">
             <button
-              onClick={() => window.print()}
+              type="button"
+              onClick={() => window.open(`/cases/${id}/summary/print`, "_blank")}
               className="h-10 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold transition flex items-center gap-2 shadow-xs cursor-pointer"
             >
               <Printer className="w-4 h-4 text-white" />
-              <span>พิมพ์รายงาน (Print A4)</span>
+              <span>พิมพ์รายงาน (PDF / A4)</span>
             </button>
 
             <Link
