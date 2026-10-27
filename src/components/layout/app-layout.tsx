@@ -216,10 +216,12 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
           {/* เมนูหลักนำทาง */}
           <nav className="p-3 space-y-1.5 overflow-y-auto min-h-0">
             {menuItems.map((item) => {
-              const Icon = item.icon;
+              const Icon = item.icon;                            
               const isActive =
-                pathname === item.href ||
-                (item.href !== "/" && pathname?.startsWith(item.href));
+                item.href === "/cases"
+                  ? pathname === "/cases" || (pathname?.startsWith("/cases/") && !pathname?.startsWith("/cases/new"))
+                  : pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href + "/"));
+
               return (
                 <Link
                   key={item.href}
